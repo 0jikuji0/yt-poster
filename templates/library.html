@@ -27,8 +27,8 @@
   <input type="hidden" name="privacy" value="{{ ch.privacy }}">
   <label id="dropzone" for="fileinput">
     <strong>Glisse tes clips ici</strong> ou clique pour parcourir
-    <span class="muted">— ajout immédiat à la file de « {{ ch.title or sel }} » (titre = nom du fichier)</span>
-    <input id="fileinput" type="file" name="videos" accept="video/*" multiple hidden>
+    <span class="muted">— vidéos seules (titre = nom du fichier), ou paires <code>clip.mp4</code> + <code>clip.json</code> pour des descriptions personnalisées</span>
+    <input id="fileinput" type="file" name="videos" accept="video/*,.json,application/json" multiple hidden>
   </label>
 </form>
 

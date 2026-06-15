@@ -24,7 +24,7 @@ import logging
 import os
 import random
 import threading
-from collections import deque
+from collections import defaultdict, deque
 from datetime import datetime, time as dtime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -466,50 +466,103 @@ def channel_settings(name):
     return redirect(url_for("channel", name=name))
 
 
+def _read_json_text(fstorage):
+    """Lit et valide un fichier JSON envoyé. Retourne (texte, None) ou (None, erreur)."""
+    try:
+        text = fstorage.read().decode("utf-8")
+        json.loads(text)
+        return text, None
+    except Exception as e:
+        return None, str(e)
+
+
 @app.route("/channel/<name>/upload", methods=["POST"])
 @login_required
 def upload(name):
     if name not in config["channels"]:
         abort(404)
     folder = channel_folder(name)
-    files = request.files.getlist("videos")
-    if not files or files[0].filename == "":
+    files = [f for f in request.files.getlist("videos") if f and f.filename]
+    if not files:
         flash("Aucun fichier sélectionné.", "error")
         return redirect(url_for("channel", name=name))
 
+    # Métadonnées du formulaire — utilisées seulement pour les vidéos SANS JSON fourni.
     tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
     privacy = request.form.get("privacy", config["channels"][name]["privacy"])
     made_for_kids = request.form.get("made_for_kids") == "on"
     base_title = request.form.get("title", "").strip()
     description = request.form.get("description", "")
 
-    count = 0
-    for f in files:
-        ext = Path(f.filename).suffix.lower()
-        if ext not in VIDEO_EXTS:
-            flash(f"Ignoré (format non vidéo) : {f.filename}", "error")
-            continue
-        stem = secure_filename(Path(f.filename).stem) or "video"
-        # Évite d'écraser un fichier existant.
-        dest = folder / f"{stem}{ext}"
-        i = 1
-        while dest.exists():
-            dest = folder / f"{stem}_{i}{ext}"
-            i += 1
-        f.save(str(dest))
-
-        meta = {
-            "title": base_title or dest.stem,
+    def form_meta(title):
+        return json.dumps({
+            "title": base_title or title,
             "description": description,
             "tags": tags,
             "privacy": privacy,
             "made_for_kids": made_for_kids,
-        }
-        dest.with_suffix(".json").write_text(
-            json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-        count += 1
+        }, indent=2, ensure_ascii=False)
 
-    flash(f"{count} vidéo(s) ajoutée(s) à la file.", "ok")
+    # On regroupe par nom de base pour associer les paires vidéo + JSON déposées
+    # en masse (clip01.mp4 + clip01.json), comme la structure attendue par poster.py.
+    groups = defaultdict(dict)
+    ignored = []
+    for f in files:
+        p = Path(f.filename)
+        ext = p.suffix.lower()
+        stem = secure_filename(p.stem) or "video"
+        if ext in VIDEO_EXTS:
+            groups[stem]["video"] = f
+            groups[stem]["ext"] = ext
+        elif ext == ".json":
+            groups[stem]["json"] = f
+        else:
+            ignored.append(f.filename)
+
+    n_videos = n_json = 0
+    for stem, g in groups.items():
+        if "video" in g:
+            # Trouve un nom libre et applique le MÊME au JSON pour garder la paire.
+            ext = g["ext"]
+            final, i = stem, 1
+            while (folder / f"{final}{ext}").exists():
+                final = f"{stem}_{i}"
+                i += 1
+            video_dest = folder / f"{final}{ext}"
+            g["video"].save(str(video_dest))
+            n_videos += 1
+
+            json_dest = video_dest.with_suffix(".json")
+            if "json" in g:
+                text, err = _read_json_text(g["json"])
+                if err:
+                    flash(f"JSON invalide pour {final} ({err}) — métadonnées du formulaire utilisées.", "error")
+                    json_dest.write_text(form_meta(video_dest.stem), encoding="utf-8")
+                else:
+                    json_dest.write_text(text, encoding="utf-8")
+                    n_json += 1
+            else:
+                json_dest.write_text(form_meta(video_dest.stem), encoding="utf-8")
+        elif "json" in g:
+            # JSON seul → métadonnées pour une vidéo existante du même nom.
+            text, err = _read_json_text(g["json"])
+            if err:
+                flash(f"JSON invalide ({stem}.json) ignoré : {err}", "error")
+            else:
+                (folder / f"{stem}.json").write_text(text, encoding="utf-8")
+                n_json += 1
+
+    parts = []
+    if n_videos:
+        parts.append(f"{n_videos} vidéo(s)")
+    if n_json:
+        parts.append(f"{n_json} fichier(s) JSON")
+    if parts:
+        flash(" + ".join(parts) + " ajouté(s).", "ok")
+    if ignored:
+        flash("Ignoré(s) (ni vidéo ni .json) : " + ", ".join(ignored[:5])
+              + ("…" if len(ignored) > 5 else ""), "error")
+
     if request.form.get("next") == "library":
         return redirect(url_for("library", channel=name))
     return redirect(url_for("channel", name=name))

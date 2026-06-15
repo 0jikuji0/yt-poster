@@ -127,8 +127,8 @@
   <div class="card">
     <h2>Déposer des vidéos</h2>
     <form method="post" action="{{ url_for('upload', name=name) }}" enctype="multipart/form-data">
-      <label>Fichiers vidéo (plusieurs possibles)
-        <input type="file" name="videos" accept="video/*" multiple required>
+      <label>Fichiers vidéo + .json (plusieurs possibles)
+        <input type="file" name="videos" accept="video/*,.json,application/json" multiple required>
       </label>
       <label>Titre <span class="muted">(vide = nom du fichier)</span>
         <input type="text" name="title" maxlength="100">
@@ -153,8 +153,10 @@
       </div>
       <button type="submit" class="primary">Ajouter à la file</button>
     </form>
-    <p class="muted">Astuce : si tu mets plusieurs fichiers, ils partagent le même titre/description.
-      Pour des métadonnées différentes, dépose-les séparément.</p>
+    <p class="muted">Astuce : dépose des paires <code>clip01.mp4</code> + <code>clip01.json</code>
+      (même nom) pour donner à chaque vidéo son propre titre/description/tags. Les vidéos
+      sans .json prennent les valeurs du formulaire ci-dessus. Tu peux aussi déposer un .json
+      seul pour (re)définir les métadonnées d'une vidéo déjà en file.</p>
   </div>
 </div>
 

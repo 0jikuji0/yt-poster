@@ -1,0 +1,34 @@
+# Stack Docker pour yt-poster — déployable tel quel dans Portainer.
+#
+# Déploiement (Portainer → Stacks → Add stack → Repository) :
+#   - Repository URL : ton dépôt git
+#   - Compose path   : docker-compose.yml
+#   - Deploy
+#
+# Tout l'état (config, identifiants OAuth, tokens, vidéos, logs) est dans le volume
+# nommé "yt_data" : rien à préparer à la main, tout se fait depuis l'interface web
+# (mot de passe, upload du client_secret.json, connexion des chaînes, dépôt des vidéos).
+#
+# Le service écoute en HTTP sur le port 8080 du conteneur. Mets ton reverse-proxy
+# (Nginx Proxy Manager / Traefik / Caddy) devant pour le HTTPS sur
+# https://yt.etiodocplateforme.fr  → voir la section "ports" / "labels" ci-dessous.
+
+services:
+  yt-poster:
+    build: .
+    image: yt-poster:latest
+    container_name: yt-poster
+    restart: unless-stopped
+    environment:
+      YT_DATA_DIR: /data
+      BASE_URL: https://yt.etiodocplateforme.fr
+      TZ: Europe/Paris
+    volumes:
+      - yt_data:/data
+    # Port hôte → conteneur. Choisis un port hôte LIBRE (différent de ton site existant).
+    # Ton reverse-proxy pointera vers ce port. (Inutile si tu utilises Traefik en réseau interne.)
+    ports:
+      - "8090:8080"
+
+volumes:
+  yt_data:

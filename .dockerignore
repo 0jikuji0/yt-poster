@@ -1,0 +1,23 @@
+# Code/dev qu'on ne met pas dans l'image
+.git/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# État local — ne JAMAIS embarquer dans l'image (vit dans le volume /data)
+config.json
+client_secret.json
+token.json
+token_*.json
+tokens/
+channels/
+data/
+logs/
+*.log
+mes_shorts/
+
+# Divers
+.DS_Store
+Thumbs.db

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — yt-poster{% endblock %}
+{% block content %}
+<h1>Tableau de bord</h1>
+
+{% if not has_secrets %}
+<div class="flash error">
+  Identifiants OAuth manquants (client_secret.json). Ajoute-les depuis la page d'une chaîne
+  pour pouvoir connecter tes comptes.
+</div>
+{% endif %}
+
+<!-- Statistiques globales -->
+<div class="kpis">
+  <div class="kpi"><span class="num">{{ stats.total_posted }}</span><span class="lbl">vidéos postées (global)</span></div>
+  <div class="kpi"><span class="num">{{ stats.total_pending }}</span><span class="lbl">en file d'attente</span></div>
+  <div class="kpi"><span class="num">{{ stats.n_connected }}/{{ stats.n_channels }}</span><span class="lbl">chaînes connectées</span></div>
+</div>
+
+<!-- Postées par chaîne -->
+<div class="card">
+  <h2>Vidéos postées par chaîne</h2>
+  {% for c in channels %}
+  <div class="bar-row">
+    <span class="bar-name">{{ c.cfg.title or c.name }}</span>
+    <div class="bar-track">
+      <div class="bar-fill" style="width: {{ (100 * c.posted / stats.max_posted) if stats.max_posted else 0 }}%"></div>
+    </div>
+    <span class="bar-val">{{ c.posted }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>Chaînes</h2>
+<div class="grid">
+  {% for c in channels %}
+  <div class="card channel">
+    <div class="row between">
+      <h2><a href="{{ url_for('channel', name=c.name) }}">{{ c.cfg.title or c.name }}</a></h2>
+      {% if c.connected %}
+        <span class="badge ok">connectée</span>
+      {% else %}
+        <span class="badge off">non connectée</span>
+      {% endif %}
+    </div>
+
+    <div class="stats">
+      <span><b>{{ c.pending }}</b> en file</span>
+      <span><b>{{ c.posted }}</b> postées</span>
+      <span><b>{{ c.cfg.posts_per_day }}</b>/jour</span>
+      <span>{{ c.cfg.window_start }}h–{{ c.cfg.window_end }}h</span>
+    </div>
+
+    {% if not c.cfg.enabled %}
+      <p class="muted">⏸ planification désactivée</p>
+    {% elif c.planned %}
+      <p class="muted">Prochains aujourd'hui : {{ c.planned[:6]|join(', ') }}{% if c.planned|length > 6 %} …{% endif %}</p>
+    {% else %}
+      <p class="muted">Aucun créneau restant aujourd'hui.</p>
+    {% endif %}
+
+    <div class="row">
+      <a class="btn" href="{{ url_for('channel', name=c.name) }}">Gérer</a>
+      {% if not c.connected %}
+        <a class="btn primary" href="{{ url_for('connect', name=c.name) }}">Connecter</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="card channel add">
+    <h2>+ Ajouter une chaîne</h2>
+    <form method="post" action="{{ url_for('add_channel') }}">
+      <input type="text" name="name" placeholder="nom (ex. chaine4)" required>
+      <button type="submit">Ajouter</button>
+    </form>
+  </div>
+</div>
+
+<h2>Journal récent</h2>
+<pre class="logs">{% for line in logs %}{{ line }}
+{% endfor %}</pre>
+{% endblock %}

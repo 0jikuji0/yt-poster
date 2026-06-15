@@ -1,9 +1,17 @@
 # --- Secrets : NE JAMAIS committer ---
 client_secret.json
 token.json
+token_*.json
+tokens/
+config.json
+
+# --- Données de l'interface web (vidéos, état) ---
+channels/
+data/
 
 # --- État / logs locaux ---
 .uploaded.json
+logs/
 *.log
 
 # --- Python ---

@@ -1,0 +1,27 @@
+# Service systemd pour l'interface web yt-poster.
+#
+# Installation (sur le serveur Linux) :
+#   1) Adapte User, WorkingDirectory et le chemin du venv ci-dessous.
+#   2) sudo cp yt-poster-web.service /etc/systemd/system/
+#   3) sudo systemctl daemon-reload
+#   4) sudo systemctl enable --now yt-poster-web
+#   5) Vérifie :  systemctl status yt-poster-web   et   journalctl -u yt-poster-web -f
+
+[Unit]
+Description=yt-poster — interface web + planificateur YouTube Shorts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/yt-poster
+Environment=PORT=8080
+# base_url DOIT correspondre à l'URL publique (utilisée pour la redirection OAuth)
+Environment=BASE_URL=https://yt.etiodocplateforme.fr
+ExecStart=/home/ubuntu/yt-poster/.venv/bin/python /home/ubuntu/yt-poster/webapp.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Configuration — yt-poster{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Premier lancement</h1>
+  <p class="muted">Choisis un mot de passe pour protéger l'accès à l'interface.</p>
+  <form method="post">
+    <label>Mot de passe (6 caractères min.)
+      <input type="password" name="password" autofocus required minlength="6">
+    </label>
+    <button type="submit">Créer</button>
+  </form>
+</div>
+{% endblock %}

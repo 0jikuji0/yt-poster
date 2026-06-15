@@ -1,0 +1,30 @@
+# ============================================================================
+# yt-poster — planification cron (3 chaînes, ~15 vidéos/jour/chaîne)
+# ============================================================================
+#
+# Principe :
+#   - "7-21" = déclenche à 7h,8h,...,21h = 15 fois par jour = 15 vidéos/jour.
+#   - run.sh ajoute un décalage ALÉATOIRE (0..50 min) dans l'heure -> jamais
+#     pile à l'heure ronde, l'horaire de publication paraît naturel.
+#   - Les 3 chaînes démarrent à des minutes différentes (0 / 20 / 40) pour ne
+#     pas poster toutes en même temps.
+#   - --max 1 (dans run.sh) : chaque déclenchement poste 1 vidéo puis s'arrête.
+#     Dossier vide -> le script log "rien à poster" et sort proprement.
+#
+# Installation :
+#   1) Adapte le chemin absolu /CHEMIN/VERS/yt-poster ci-dessous.
+#   2) Rends le wrapper exécutable :   chmod +x /CHEMIN/VERS/yt-poster/run.sh
+#   3) Édite ton crontab :             crontab -e
+#      puis colle les 3 lignes (sans les commentaires si tu veux).
+#   4) Vérifie :                       crontab -l
+#
+# Logs : /CHEMIN/VERS/yt-poster/logs/chaineX.log
+# ----------------------------------------------------------------------------
+
+ 0 7-21 * * *  /CHEMIN/VERS/yt-poster/run.sh chaine1
+20 7-21 * * *  /CHEMIN/VERS/yt-poster/run.sh chaine2
+40 7-21 * * *  /CHEMIN/VERS/yt-poster/run.sh chaine3
+
+# Astuce : pour étaler davantage le hasard, tu peux réduire la fenêtre du jitter
+# en passant un 2e argument à run.sh, ex. 1800 (=30 min) :
+#   0 7-21 * * *  /CHEMIN/VERS/yt-poster/run.sh chaine1 1800

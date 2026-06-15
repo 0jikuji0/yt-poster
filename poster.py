@@ -192,8 +192,8 @@ def main():
     p = argparse.ArgumentParser(
         description="Poste les vidéos d'un dossier en YouTube Shorts (API officielle)."
     )
-    p.add_argument("--folder", required=True, type=Path,
-                   help="Dossier contenant les vidéos + leurs JSON")
+    p.add_argument("--folder", type=Path,
+                   help="Dossier contenant les vidéos + leurs JSON (requis sauf avec --login)")
     p.add_argument("--secrets", type=Path, default=Path("client_secret.json"),
                    help="Fichier d'identifiants OAuth (défaut : client_secret.json)")
     p.add_argument("--token", type=Path, default=Path("token.json"),
@@ -206,7 +206,20 @@ def main():
                    help="Liste ce qui serait posté, sans rien envoyer")
     p.add_argument("--no-shorts-hashtag", action="store_true",
                    help="Ne pas ajouter automatiquement #Shorts à la description")
+    p.add_argument("--login", action="store_true",
+                   help="Effectue uniquement l'authentification OAuth (génère le token) puis quitte")
     args = p.parse_args()
+
+    # Mode authentification seule : utile pour générer un token.json en local
+    # (ouvre le navigateur) avant de copier le fichier sur un serveur headless.
+    if args.login:
+        get_authenticated_service(args.secrets, args.token)
+        log.info("Authentification OK — token prêt : %s", args.token)
+        return
+
+    if not args.folder:
+        log.error("--folder est requis (sauf avec --login).")
+        sys.exit(1)
 
     folder = args.folder
     if not folder.is_dir():

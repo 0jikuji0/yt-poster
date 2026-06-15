@@ -13,9 +13,25 @@ ses métadonnées (titre, description, tags). Le script retient ce qui a déjà 
   - `upload_video()` : upload résumable + retry exponentiel sur erreurs 5xx.
   - `find_jobs()` : liste les couples (vidéo, json) non encore postés.
   - `main()` : CLI (argparse).
-- `requirements.txt` — `google-api-python-client`, `google-auth-oauthlib`, `google-auth-httplib2`.
+- `requirements.txt` — `google-api-python-client`, `google-auth-oauthlib`, `google-auth-httplib2`, plus `Flask`, `APScheduler`, `tzdata` pour l'interface web.
 - `example.json` — modèle de fichier sidecar.
 - `.uploaded.json` — créé à l'exécution dans le dossier des vidéos (état, non versionné).
+
+## Interface web (multi-chaînes) — voir WEB.md
+- `webapp.py` — appli Flask : login mot de passe, OAuth web (« Connecter »), dépôt de
+  vidéos, réglages par chaîne, et **planificateur intégré** (APScheduler) qui poste tout
+  seul à des heures aléatoires dans une fenêtre horaire. Réutilise les fonctions de `poster.py`.
+- `templates/`, `static/style.css` — UI.
+- `config.json` (non versionné) : mot de passe haché, `base_url`, `timezone`, réglages par chaîne.
+- `channels/<nom>/` : vidéos + JSON + `.uploaded.json`. `tokens/token_<nom>.json` : OAuth par chaîne.
+- `yt-poster-web.service` : unité systemd pour faire tourner l'appli en permanence.
+- L'OAuth web exige un client Google de type **« Application Web »** avec l'URI de
+  redirection `<base_url>/oauth/callback` (différent du client « bureau » du CLI).
+- Lancement : `python webapp.py` (port 8080 par défaut, `PORT`/`BASE_URL` en env).
+
+## Mode CLI (toujours dispo, alternative au web)
+- `poster.py --login` : fait juste l'OAuth (génère un token) puis quitte.
+- `run.sh <chaine>` + `crontab.example` : ancienne approche cron (remplacée par le planificateur web).
 
 ## Structure attendue d'un dossier de vidéos
 ```

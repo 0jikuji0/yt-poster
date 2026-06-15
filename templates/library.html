@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Bibliothèque — yt-poster{% endblock %}
+{% block content %}
+<div class="row between">
+  <h1>Bibliothèque</h1>
+  <div class="stats">
+    <span><b>{{ total }}</b> clip(s) en attente</span>
+    {% if total_mb %}<span>{{ total_mb }} Mo</span>{% endif %}
+  </div>
+</div>
+
+<!-- Onglets chaînes -->
+<div class="tabs">
+  {% for n in names %}
+  <a class="tab {% if n == sel %}active{% endif %}" href="{{ url_for('library', channel=n) }}">
+    {{ titles[n] or n }}
+    <span class="count">{{ counts[n] }}</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% if sel %}
+<!-- Zone de dépôt rapide -->
+<form id="dropform" method="post" enctype="multipart/form-data"
+      action="{{ url_for('upload', name=sel) }}">
+  <input type="hidden" name="next" value="library">
+  <input type="hidden" name="privacy" value="{{ ch.privacy }}">
+  <label id="dropzone" for="fileinput">
+    <strong>Glisse tes clips ici</strong> ou clique pour parcourir
+    <span class="muted">— ajout immédiat à la file de « {{ ch.title or sel }} » (titre = nom du fichier)</span>
+    <input id="fileinput" type="file" name="videos" accept="video/*" multiple hidden>
+  </label>
+</form>
+
+<!-- Galerie -->
+{% if items %}
+<div class="gallery">
+  {% for it in items %}
+  <div class="clip">
+    <video preload="metadata" muted controls
+           src="{{ url_for('media', name=sel, filename=it.file) }}#t=0.5"></video>
+    <div class="clip-meta">
+      <div class="clip-title" title="{{ it.title }}">{{ it.title }}</div>
+      <div class="muted">{{ it.file }} · {{ it.size_mb }} Mo</div>
+    </div>
+    <form method="post" action="{{ url_for('delete_pending', name=sel) }}"
+          onsubmit="return confirm('Supprimer {{ it.file }} ?');">
+      <input type="hidden" name="video" value="{{ it.file }}">
+      <button type="submit" class="btn danger small">Supprimer</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">Aucun clip en attente pour cette chaîne. Dépose-en ci-dessus.</p>
+{% endif %}
+{% else %}
+<p class="muted">Aucune chaîne.</p>
+{% endif %}
+
+<script>
+  // Dépôt rapide : soumission automatique dès qu'on dépose ou choisit des fichiers.
+  const form = document.getElementById('dropform');
+  const zone = document.getElementById('dropzone');
+  const input = document.getElementById('fileinput');
+  if (form) {
+    input.addEventListener('change', () => { if (input.files.length) form.submit(); });
+    ['dragover', 'dragenter'].forEach(e =>
+      zone.addEventListener(e, ev => { ev.preventDefault(); zone.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(e =>
+      zone.addEventListener(e, ev => { ev.preventDefault(); zone.classList.remove('over'); }));
+    zone.addEventListener('drop', ev => {
+      if (ev.dataTransfer.files.length) { input.files = ev.dataTransfer.files; form.submit(); }
+    });
+  }
+</script>
+{% endblock %}

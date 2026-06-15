@@ -1,0 +1,27 @@
+# Reverse-proxy HTTPS pour yt-poster, avec certificat TLS automatique (Let's Encrypt).
+#
+# Prérequis :
+#   - Le DNS de yt.etiodocplateforme.fr pointe vers l'IP du serveur (enregistrement A/AAAA).
+#   - Les ports 80 et 443 sont ouverts.
+#   - L'appli yt-poster tourne en local sur le port 8080 (service systemd).
+#
+# Installation de Caddy (Debian/Ubuntu) :
+#   sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+#   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+#   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+#   sudo apt update && sudo apt install caddy
+#
+# Puis :
+#   sudo cp Caddyfile.example /etc/caddy/Caddyfile   (et adapte si besoin)
+#   sudo systemctl reload caddy
+#
+# Caddy obtient et renouvelle le certificat tout seul.
+
+yt.etiodocplateforme.fr {
+	# Uploads de vidéos volumineux : on relève la limite de taille du corps de requête.
+	request_body {
+		max_size 4GB
+	}
+
+	reverse_proxy 127.0.0.1:8080
+}

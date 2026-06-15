@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}{{ ch.title or name }} — yt-poster{% endblock %}
+{% block content %}
+<div class="row between">
+  <h1>{{ ch.title or name }}</h1>
+  {% if connected %}
+    <span class="badge ok">connectée</span>
+  {% else %}
+    <a class="btn primary" href="{{ url_for('connect', name=name) }}">Connecter cette chaîne</a>
+  {% endif %}
+</div>
+
+<!-- Gestion du compte -->
+<div class="cols">
+  <div class="card">
+    <h2>Compte</h2>
+    <form method="post" action="{{ url_for('rename_channel', name=name) }}">
+      <label>Renommer la chaîne
+        <input type="text" name="new_name" value="{{ name }}" required>
+      </label>
+      <button type="submit">Renommer</button>
+    </form>
+    <p class="muted">Déplace le dossier des vidéos et le token. Le titre affiché ({{ ch.title or '—' }})
+      vient de YouTube une fois la chaîne connectée.</p>
+    <hr>
+    <a class="btn {% if not connected %}primary{% endif %}" href="{{ url_for('connect', name=name) }}">
+      {% if connected %}Reconnecter{% else %}Connecter{% endif %}
+    </a>
+  </div>
+
+  <div class="card">
+    <h2>Identifiants OAuth (clés)</h2>
+    <p class="muted">Le fichier <code>client_secret.json</code> (type « Application Web ») est
+      partagé par toutes les chaînes. Dépose-le ici pour l'installer/le mettre à jour.</p>
+    <form method="post" action="{{ url_for('upload_credentials') }}" enctype="multipart/form-data">
+      <label>Fichier client_secret.json
+        <input type="file" name="secrets" accept="application/json,.json" required>
+      </label>
+      <button type="submit">Enregistrer les clés</button>
+    </form>
+  </div>
+</div>
+
+<!-- Suivi des vues (saisie manuelle) -->
+<div class="card">
+  <h2>Vues — évolution {{ today[:4] }}</h2>
+  {% if spark %}
+  <svg class="spark" viewBox="0 0 {{ spark.w }} {{ spark.h }}" preserveAspectRatio="none">
+    <polyline points="{{ spark.points }}" fill="none" stroke="#ff3b30" stroke-width="2"/>
+  </svg>
+  <p class="muted">min {{ "{:,}".format(spark.vmin).replace(',', ' ') }} · max {{ "{:,}".format(spark.vmax).replace(',', ' ') }} vues</p>
+  {% else %}
+  <p class="muted">Ajoute au moins deux relevés pour voir la courbe.</p>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('add_views', name=name) }}" class="row">
+    <label>Date <input type="date" name="date" value="{{ today }}" required></label>
+    <label>Nombre de vues <input type="number" name="views" min="0" placeholder="ex. 12500" required></label>
+    <button type="submit" class="primary">Ajouter le relevé</button>
+  </form>
+
+  {% if views %}
+  <table class="views">
+    <tr><th>Date</th><th>Vues</th><th>Évolution</th><th></th></tr>
+    {% for r in views %}
+    <tr>
+      <td>{{ r.date }}</td>
+      <td>{{ "{:,}".format(r.views).replace(',', ' ') }}</td>
+      <td>
+        {% if r.delta is not none %}
+          <span class="{{ 'up' if r.delta >= 0 else 'down' }}">
+            {{ '+' if r.delta >= 0 else '' }}{{ "{:,}".format(r.delta).replace(',', ' ') }}
+          </span>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('delete_views', name=name) }}"
+              onsubmit="return confirm('Supprimer le relevé du {{ r.date }} ?');">
+          <input type="hidden" name="date" value="{{ r.date }}">
+          <button type="submit" class="btn danger small">×</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+<div class="cols">
+  <!-- Réglages -->
+  <div class="card">
+    <h2>Réglages</h2>
+    <form method="post" action="{{ url_for('channel_settings', name=name) }}">
+      <label class="check">
+        <input type="checkbox" name="enabled" {% if ch.enabled %}checked{% endif %}>
+        Planification active
+      </label>
+      <label>Vidéos par jour
+        <input type="number" name="posts_per_day" min="0" max="50" value="{{ ch.posts_per_day }}">
+      </label>
+      <div class="row">
+        <label>Début (h)
+          <input type="number" name="window_start" min="0" max="23" value="{{ ch.window_start }}">
+        </label>
+        <label>Fin (h)
+          <input type="number" name="window_end" min="1" max="24" value="{{ ch.window_end }}">
+        </label>
+      </div>
+      <label>Confidentialité par défaut
+        <select name="privacy">
+          {% for p in ['public', 'unlisted', 'private'] %}
+          <option value="{{ p }}" {% if ch.privacy == p %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Enregistrer</button>
+    </form>
+    {% if planned %}
+    <p class="muted">Créneaux du jour : {{ planned|join(', ') }}</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('post_now', name=name) }}">
+      <button type="submit" class="btn">Poster une vidéo maintenant</button>
+    </form>
+  </div>
+
+  <!-- Dépôt de vidéos -->
+  <div class="card">
+    <h2>Déposer des vidéos</h2>
+    <form method="post" action="{{ url_for('upload', name=name) }}" enctype="multipart/form-data">
+      <label>Fichiers vidéo (plusieurs possibles)
+        <input type="file" name="videos" accept="video/*" multiple required>
+      </label>
+      <label>Titre <span class="muted">(vide = nom du fichier)</span>
+        <input type="text" name="title" maxlength="100">
+      </label>
+      <label>Description
+        <textarea name="description" rows="3"></textarea>
+      </label>
+      <label>Tags <span class="muted">(séparés par des virgules)</span>
+        <input type="text" name="tags" placeholder="short, viral, fun">
+      </label>
+      <div class="row">
+        <label>Confidentialité
+          <select name="privacy">
+            {% for p in ['public', 'unlisted', 'private'] %}
+            <option value="{{ p }}" {% if ch.privacy == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="check">
+          <input type="checkbox" name="made_for_kids"> Contenu pour enfants
+        </label>
+      </div>
+      <button type="submit" class="primary">Ajouter à la file</button>
+    </form>
+    <p class="muted">Astuce : si tu mets plusieurs fichiers, ils partagent le même titre/description.
+      Pour des métadonnées différentes, dépose-les séparément.</p>
+  </div>
+</div>
+
+<!-- File d'attente -->
+<div class="card">
+  <h2>File d'attente ({{ pending|length }})</h2>
+  {% if pending %}
+  <ul class="list">
+    {% for v in pending %}
+    <li class="row between">
+      <span>{{ v }}</span>
+      <form method="post" action="{{ url_for('delete_pending', name=name) }}"
+            onsubmit="return confirm('Supprimer {{ v }} ?');">
+        <input type="hidden" name="video" value="{{ v }}">
+        <button type="submit" class="btn danger">Supprimer</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">File vide.</p>
+  {% endif %}
+</div>
+
+<!-- Historique -->
+<div class="card">
+  <h2>Déjà postées ({{ history|length }})</h2>
+  {% if history %}
+  <ul class="list">
+    {% for fname, info in history[:50] %}
+    <li class="row between">
+      <span>{{ info.title or fname }}</span>
+      <a href="{{ info.url }}" target="_blank" rel="noopener">{{ info.url }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Aucune vidéo postée pour l'instant.</p>
+  {% endif %}
+</div>
+{% endblock %}

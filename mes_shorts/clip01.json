@@ -1,0 +1,9 @@
+{
+  "title": "Mon premier Short 🎬",
+  "description": "Une petite description sympa.\nDeuxième ligne si tu veux.",
+  "tags": ["short", "test", "demo"],
+  "privacy": "public",
+  "category_id": "22",
+  "made_for_kids": false,
+  "publish_at": null
+}

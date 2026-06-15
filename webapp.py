@@ -217,10 +217,34 @@ def fetch_channel_title(name: str):
     return None
 
 
+def ensure_sidecars(name: str) -> int:
+    """Crée un .json par défaut (titre = nom du fichier) pour toute vidéo du dossier
+    qui n'en a pas. Permet de déposer des vidéos en SSH sans préparer les métadonnées."""
+    ch = config["channels"].get(name, {})
+    folder = channel_folder(name)
+    created = 0
+    for video in folder.iterdir():
+        if video.suffix.lower() not in VIDEO_EXTS:
+            continue
+        sidecar = video.with_suffix(".json")
+        if not sidecar.exists():
+            meta = {
+                "title": video.stem,
+                "description": "",
+                "tags": [],
+                "privacy": ch.get("privacy", "public"),
+                "made_for_kids": False,
+            }
+            sidecar.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+            created += 1
+    return created
+
+
 def channel_status(name: str) -> dict:
     """Infos affichées sur le dashboard pour une chaîne."""
     ch = config["channels"][name]
     folder = channel_folder(name)
+    ensure_sidecars(name)
     state = load_state(folder / ".uploaded.json")
     pending = find_jobs(folder, state)
     return {
@@ -286,6 +310,7 @@ def post_one(name: str):
         if not ch:
             return
         folder = channel_folder(name)
+        ensure_sidecars(name)  # rend postables les vidéos déposées en SSH sans .json
         state_path = folder / ".uploaded.json"
         state = load_state(state_path)
         jobs = find_jobs(folder, state)
@@ -428,6 +453,7 @@ def channel(name):
         abort(404)
     ch = config["channels"][name]
     folder = channel_folder(name)
+    ensure_sidecars(name)
     state = load_state(folder / ".uploaded.json")
     pending = [v.name for v, _ in find_jobs(folder, state)]
     history = sorted(state.items(),
@@ -604,6 +630,7 @@ def library():
     sel = request.args.get("channel") or (names[0] if names else None)
     items, total_mb = [], 0.0
     if sel and sel in config["channels"]:
+        ensure_sidecars(sel)
         folder = channel_folder(sel)
         state = load_state(folder / ".uploaded.json")
         for video, sidecar in find_jobs(folder, state):
@@ -622,6 +649,7 @@ def library():
     # Compteurs des autres chaînes pour les onglets.
     counts = {}
     for n in names:
+        ensure_sidecars(n)
         f = channel_folder(n)
         counts[n] = len(find_jobs(f, load_state(f / ".uploaded.json")))
     titles = {n: config["channels"][n].get("title") for n in names}

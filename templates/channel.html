@@ -118,6 +118,9 @@
     {% if planned %}
     <p class="muted">Créneaux du jour : {{ planned|join(', ') }}</p>
     {% endif %}
+    <form method="post" action="{{ url_for('regenerate_channel_schedule', name=name) }}">
+      <button type="submit" class="btn">🎲 Régénérer les horaires de cette chaîne</button>
+    </form>
     <form method="post" action="{{ url_for('post_now', name=name) }}">
       <button type="submit" class="btn">Poster une vidéo maintenant</button>
     </form>

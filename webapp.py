@@ -280,25 +280,36 @@ def generate_times(ch: dict, now: datetime):
     return [start + timedelta(seconds=o) for o in offsets]
 
 
+def plan_channel(name: str):
+    """(Re)génère les créneaux du jour pour UNE seule chaîne (sans toucher aux autres)."""
+    # Retire les jobs déjà programmés pour cette chaîne (le ':' final évite de matcher
+    # une chaîne dont le nom est un préfixe d'une autre).
+    for job in scheduler.get_jobs():
+        if job.id.startswith(f"post:{name}:"):
+            job.remove()
+    ch = config["channels"].get(name)
+    if not ch or not ch.get("enabled"):
+        SCHEDULE_TODAY[name] = []
+        return
+    now = datetime.now(TZ)
+    times = generate_times(ch, now)
+    SCHEDULE_TODAY[name] = times
+    for t in times:
+        if t > now:
+            scheduler.add_job(
+                post_one, "date", run_date=t, args=[name],
+                id=f"post:{name}:{t.timestamp()}", misfire_grace_time=3600,
+            )
+
+
 def plan_day():
-    """Recalcule les horaires du jour et (re)programme les jobs futurs."""
+    """Recalcule les horaires du jour et (re)programme les jobs futurs (toutes chaînes)."""
     for job in scheduler.get_jobs():
         if job.id.startswith("post:"):
             job.remove()
     SCHEDULE_TODAY.clear()
-
-    now = datetime.now(TZ)
-    for name, ch in config["channels"].items():
-        if not ch.get("enabled"):
-            continue
-        times = generate_times(ch, now)
-        SCHEDULE_TODAY[name] = times
-        for t in times:
-            if t > now:
-                scheduler.add_job(
-                    post_one, "date", run_date=t, args=[name],
-                    id=f"post:{name}:{t.timestamp()}", misfire_grace_time=3600,
-                )
+    for name in list(config["channels"]):
+        plan_channel(name)
     log.info("Planification du jour : %s",
              {n: len(ts) for n, ts in SCHEDULE_TODAY.items()})
 
@@ -631,6 +642,19 @@ def regenerate_schedule():
     remaining = sum(len([t for t in ts if t > now]) for ts in SCHEDULE_TODAY.values())
     flash(f"Horaires régénérés — {remaining} créneau(x) restant(s) aujourd'hui.", "ok")
     return redirect(request.referrer or url_for("dashboard"))
+
+
+@app.route("/channel/<name>/schedule/regenerate", methods=["POST"])
+@login_required
+def regenerate_channel_schedule(name):
+    """Re-tire au hasard les horaires du jour pour cette chaîne uniquement."""
+    if name not in config["channels"]:
+        abort(404)
+    plan_channel(name)
+    now = datetime.now(TZ)
+    remaining = len([t for t in SCHEDULE_TODAY.get(name, []) if t > now])
+    flash(f"Horaires régénérés pour cette chaîne — {remaining} créneau(x) restant(s) aujourd'hui.", "ok")
+    return redirect(url_for("channel", name=name))
 
 
 # --- Bibliothèque (vue galerie « façon Drive ») ---

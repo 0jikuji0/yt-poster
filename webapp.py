@@ -622,6 +622,17 @@ def post_now(name):
     return redirect(url_for("channel", name=name))
 
 
+@app.route("/schedule/regenerate", methods=["POST"])
+@login_required
+def regenerate_schedule():
+    """Re-tire au hasard les horaires de publication du jour (toutes chaînes)."""
+    plan_day()
+    now = datetime.now(TZ)
+    remaining = sum(len([t for t in ts if t > now]) for ts in SCHEDULE_TODAY.values())
+    flash(f"Horaires régénérés — {remaining} créneau(x) restant(s) aujourd'hui.", "ok")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
 # --- Bibliothèque (vue galerie « façon Drive ») ---
 @app.route("/library")
 @login_required

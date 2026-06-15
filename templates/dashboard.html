@@ -31,7 +31,12 @@
   {% endfor %}
 </div>
 
-<h2>Chaînes</h2>
+<div class="row between">
+  <h2>Chaînes</h2>
+  <form method="post" action="{{ url_for('regenerate_schedule') }}">
+    <button type="submit" class="btn">🎲 Régénérer les horaires du jour</button>
+  </form>
+</div>
 <div class="grid">
   {% for c in channels %}
   <div class="card channel">

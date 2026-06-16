@@ -644,6 +644,24 @@ def regenerate_schedule():
     return redirect(request.referrer or url_for("dashboard"))
 
 
+@app.route("/channel/<name>/cadence", methods=["POST"])
+@login_required
+def set_cadence(name):
+    """Modifie rapidement le nombre de vidéos/jour d'une chaîne (depuis le dashboard)."""
+    if name not in config["channels"]:
+        abort(404)
+    try:
+        n = max(0, min(50, int(request.form.get("posts_per_day", ""))))
+    except (TypeError, ValueError):
+        flash("Cadence invalide.", "error")
+        return redirect(request.referrer or url_for("dashboard"))
+    config["channels"][name]["posts_per_day"] = n
+    save_config()
+    plan_channel(name)  # applique tout de suite la nouvelle cadence
+    flash(f"Cadence de « {name} » : {n} vidéo(s)/jour.", "ok")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
 @app.route("/channel/<name>/schedule/regenerate", methods=["POST"])
 @login_required
 def regenerate_channel_schedule(name):

@@ -74,6 +74,12 @@ button:hover, .btn:hover { border-color: #3a3f4b; }
 }
 .channel.add { display: flex; flex-direction: column; justify-content: center; }
 
+.cadence { display: flex; align-items: flex-end; gap: 8px; margin: 4px 0 12px; }
+.cadence label { margin: 0; color: var(--text); font-size: 13px; }
+.cadence input { width: 64px; margin-top: 4px; }
+.cadence .muted { padding-bottom: 9px; }
+.cad-btn { padding: 9px 14px; }
+
 /* --- Bibliothèque --- */
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 20px; }
 .tab {

@@ -499,20 +499,44 @@ def logout():
     return redirect(url_for("login"))
 
 
+def build_spa_data() -> list:
+    """Données injectées dans la SPA (front « clipstudio ») : une entrée par chaîne
+    avec relevés (vues + abonnés), réglages, créneaux du jour et statut."""
+    now = datetime.now(TZ)
+    chans = []
+    for name, ch in config["channels"].items():
+        folder = channel_folder(name)
+        ensure_sidecars(name)
+        state = load_state(folder / ".uploaded.json")
+        readings = sorted(ch.get("views", []), key=lambda e: e.get("date", ""))
+        readings = [{"date": e["date"], "views": int(e.get("views", 0)),
+                     "subs": int(e.get("subs", 0))} for e in readings]
+        connected = token_path(name).exists()
+        chans.append({
+            "id": name,
+            "connected": connected,
+            "status": "connectée" if connected else "non connectée",
+            "ytTitle": ch.get("title") or "—",
+            "readings": readings,
+            "settings": {
+                "active": bool(ch.get("enabled")),
+                "perDay": int(ch.get("posts_per_day", 0)),
+                "start": int(ch.get("window_start", 0)),
+                "end": int(ch.get("window_end", 0)),
+                "privacy": ch.get("privacy", "public"),
+            },
+            "slots": [t.strftime("%H:%M") for t in SCHEDULE_TODAY.get(name, []) if t > now],
+            "pending": len(find_jobs(folder, state)),
+            "posted": len(state),
+        })
+    return chans
+
+
 @app.route("/")
 @login_required
 def dashboard():
-    channels = [channel_status(n) for n in config["channels"]]
-    stats = {
-        "total_posted": sum(c["posted"] for c in channels),
-        "total_pending": sum(c["pending"] for c in channels),
-        "n_channels": len(channels),
-        "n_connected": sum(1 for c in channels if c["connected"]),
-        "max_posted": max((c["posted"] for c in channels), default=0),
-    }
-    return render_template("dashboard.html", channels=channels,
-                           logs=list(LOG_BUFFER)[:60], stats=stats,
-                           has_secrets=SECRETS_PATH.exists())
+    return render_template("app.html", channels=build_spa_data(),
+                           initial_view="global", has_secrets=SECRETS_PATH.exists())
 
 
 @app.route("/stats")
@@ -585,28 +609,8 @@ def views_sparkline(views, w=600, h=140, pad=14):
 def channel(name):
     if name not in config["channels"]:
         abort(404)
-    ch = config["channels"][name]
-    folder = channel_folder(name)
-    ensure_sidecars(name)
-    state = load_state(folder / ".uploaded.json")
-    pending = [v.name for v, _ in find_jobs(folder, state)]
-    history = sorted(state.items(),
-                     key=lambda kv: kv[1].get("uploaded_at", ""), reverse=True)
-
-    # Relevés de vues : on calcule l'écart avec le relevé précédent.
-    views = sorted(ch.get("views", []), key=lambda e: e["date"])
-    rows, prev = [], None
-    for e in views:
-        delta = None if prev is None else int(e["views"]) - prev
-        rows.append({"date": e["date"], "views": int(e["views"]), "delta": delta})
-        prev = int(e["views"])
-
-    return render_template("channel.html", name=name, ch=ch,
-                           connected=token_path(name).exists(),
-                           pending=pending, history=history,
-                           views=list(reversed(rows)), spark=views_sparkline(views),
-                           today=datetime.now(TZ).date().isoformat(),
-                           planned=[t.strftime("%H:%M") for t in SCHEDULE_TODAY.get(name, [])])
+    return render_template("app.html", channels=build_spa_data(),
+                           initial_view=name, has_secrets=SECRETS_PATH.exists())
 
 
 @app.route("/channel/<name>/settings", methods=["POST"])
@@ -935,12 +939,19 @@ def add_views(name):
     except ValueError:
         flash("Nombre de vues invalide.", "error")
         return redirect(back)
+    # Abonnés : optionnel. Si vide, on reprend la dernière valeur connue.
+    raw_subs = request.form.get("subs", "").replace(" ", "").replace(",", "")
     lst = [e for e in config["channels"][name].get("views", []) if e.get("date") != date]
-    lst.append({"date": date, "views": views})
+    lst.sort(key=lambda e: e["date"])
+    try:
+        subs = int(raw_subs)
+    except ValueError:
+        subs = lst[-1].get("subs", 0) if lst else 0
+    lst.append({"date": date, "views": views, "subs": subs})
     lst.sort(key=lambda e: e["date"])
     config["channels"][name]["views"] = lst
     save_config()
-    flash("Relevé de vues enregistré.", "ok")
+    flash("Relevé enregistré.", "ok")
     return redirect(back)
 
 

@@ -433,8 +433,6 @@ def start_scheduler():
         return
     # Replanifie chaque nuit à 00h01, et tout de suite pour le reste de la journée.
     scheduler.add_job(plan_day, "cron", hour=0, minute=1, id="planner")
-    # Relevé quotidien des stats YouTube (vues + abonnés) à 23h30, même sans visite.
-    scheduler.add_job(snapshot_all, "cron", hour=23, minute=30, id="daily-stats")
     scheduler.start()
     plan_day()
 
@@ -501,67 +499,88 @@ def logout():
     return redirect(url_for("login"))
 
 
-def record_snapshot(name: str, force: bool = False) -> bool:
-    """Enregistre (ou met à jour) le relevé du JOUR depuis l'API YouTube :
-    vues totales de la chaîne + abonnés. Ne fait rien si la chaîne n'est pas
-    connectée ou si l'API ne renvoie pas de stats. Retourne True si modifié."""
-    if not token_path(name).exists():
-        return False
-    stats = fetch_youtube_stats(name, force=force)
-    cstats = stats.get("channel")
-    if not cstats:
-        return False
-    today = datetime.now(TZ).date().isoformat()
-    views, subs = int(cstats["views"]), int(cstats["subs"])
-    lst = config["channels"][name].get("views", [])
-    existing = next((e for e in lst if e.get("date") == today), None)
-    if existing and existing.get("views") == views and existing.get("subs") == subs:
-        return False  # déjà à jour
-    lst = [e for e in lst if e.get("date") != today]
-    lst.append({"date": today, "views": views, "subs": subs})
-    lst.sort(key=lambda e: e["date"])
-    config["channels"][name]["views"] = lst
-    save_config()
-    return True
+# Caches mémoire (TTL) pour ne pas marteler l'API à chaque chargement de page.
+_TOTALS_CACHE: dict = {}     # nom -> (epoch, {subs, views, videos} | None)
+_ANALYTICS_CACHE: dict = {}  # nom -> (epoch, [ {date, views, subs}, ... ])
+TOTALS_TTL = 600
+ANALYTICS_TTL = 1800
+ANALYTICS_DAYS = 120
 
 
-def snapshot_all():
-    """Relevé quotidien automatique des stats YouTube (toutes chaînes connectées).
-    Appelé par le planificateur une fois par jour."""
-    n = 0
-    for name in list(config["channels"]):
+def fetch_channel_totals(name: str, force: bool = False):
+    """Totaux quasi temps réel de la chaîne (channels.list, 1 unité) : abonnés,
+    vues totales, nb de vidéos. None si non connectée / erreur."""
+    now = datetime.now(TZ).timestamp()
+    c = _TOTALS_CACHE.get(name)
+    if c and not force and now - c[0] < TOTALS_TTL:
+        return c[1]
+    out = None
+    yt = get_youtube(name)
+    if yt:
         try:
-            if record_snapshot(name, force=True):
-                n += 1
-        except Exception as e:
-            log.warning("[%s] relevé quotidien échoué : %s", name, e)
-    log.info("Relevé quotidien YouTube : %d chaîne(s) mise(s) à jour.", n)
+            resp = yt.channels().list(part="statistics", mine=True).execute()
+            items = resp.get("items", [])
+            if items:
+                s = items[0]["statistics"]
+                out = {"subs": int(s.get("subscriberCount", 0)),
+                       "views": int(s.get("viewCount", 0)),
+                       "videos": int(s.get("videoCount", 0)),
+                       "subs_hidden": bool(s.get("hiddenSubscriberCount", False))}
+        except HttpError as e:
+            log.warning("[%s] totaux indisponibles : %s", name, e)
+    _TOTALS_CACHE[name] = (now, out)
+    return out
+
+
+def fetch_analytics_daily(name: str, force: bool = False):
+    """Vues + variation d'abonnés PAR JOUR via l'API YouTube Analytics.
+    Renvoie [{date, views, subs}] (subs = gagnés-perdus ce jour) ou None.
+    NB : l'API Analytics a ~2-3 jours de décalage (donnée officielle YouTube)."""
+    now = datetime.now(TZ).timestamp()
+    c = _ANALYTICS_CACHE.get(name)
+    if c and not force and now - c[0] < ANALYTICS_TTL:
+        return c[1]
+    creds = get_credentials(name)
+    if not creds:
+        return None
+    out = None
+    try:
+        ya = build("youtubeAnalytics", "v2", credentials=creds, cache_discovery=False)
+        end = datetime.now(TZ).date()
+        start = end - timedelta(days=ANALYTICS_DAYS)
+        resp = ya.reports().query(
+            ids="channel==MINE", startDate=start.isoformat(), endDate=end.isoformat(),
+            metrics="views,subscribersGained,subscribersLost", dimensions="day",
+        ).execute()
+        rows = resp.get("rows", []) or []
+        out = [{"date": r[0], "views": int(r[1]), "subs": int(r[2]) - int(r[3])} for r in rows]
+        out.sort(key=lambda e: e["date"])
+    except HttpError as e:
+        log.warning("[%s] analytics indisponibles : %s", name, e)
+        out = None
+    _ANALYTICS_CACHE[name] = (now, out)
+    return out
 
 
 def build_spa_data() -> list:
     """Données injectées dans la SPA (front « clipstudio ») : une entrée par chaîne
-    avec relevés (vues + abonnés), réglages, créneaux du jour et statut."""
+    avec stats par jour (Analytics), totaux, réglages, créneaux du jour et statut."""
     now = datetime.now(TZ)
     chans = []
     for name, ch in config["channels"].items():
-        # Relevé auto du jour depuis YouTube (silencieux ; cache 10 min via l'API).
-        try:
-            record_snapshot(name)
-        except Exception as e:
-            log.warning("[%s] snapshot auto échoué : %s", name, e)
         folder = channel_folder(name)
         ensure_sidecars(name)
         state = load_state(folder / ".uploaded.json")
-        readings = sorted(ch.get("views", []), key=lambda e: e.get("date", ""))
-        readings = [{"date": e["date"], "views": int(e.get("views", 0)),
-                     "subs": int(e.get("subs", 0))} for e in readings]
         connected = token_path(name).exists()
+        totals = fetch_channel_totals(name) if connected else None
+        daily = (fetch_analytics_daily(name) if connected else None) or []
         chans.append({
             "id": name,
             "connected": connected,
             "status": "connectée" if connected else "non connectée",
             "ytTitle": ch.get("title") or "—",
-            "readings": readings,
+            "daily": daily,            # [{date, views (jour), subs (Δ jour)}]
+            "totals": totals,          # {subs, views, videos} ou None
             "settings": {
                 "active": bool(ch.get("enabled")),
                 "perDay": int(ch.get("posts_per_day", 0)),
@@ -1009,13 +1028,17 @@ def sync_views(name):
     if not token_path(name).exists():
         flash("Chaîne non connectée — clique « Reconnecter » d'abord.", "error")
         return redirect(back)
-    stats = fetch_youtube_stats(name, force=True)
-    if stats.get("error"):
-        flash(stats["error"], "error")
+    totals = fetch_channel_totals(name, force=True)
+    daily = fetch_analytics_daily(name, force=True)
+    if totals is None:
+        flash("Lecture impossible — reconnecte la chaîne pour autoriser l'accès aux stats.", "error")
         return redirect(back)
-    record_snapshot(name, force=True)
-    c = stats["channel"]
-    flash(f"Synchronisé ✓ {c['subs']} abonnés · {c['views']} vues (chaîne).", "ok")
+    if daily is None:
+        flash("Stats par jour indisponibles — reconnecte la chaîne pour autoriser "
+              "l'accès YouTube Analytics (nouveau).", "error")
+        return redirect(back)
+    flash(f"Synchronisé ✓ {totals['subs']} abonnés · {totals['views']} vues · "
+          f"{len(daily)} jour(s) de données.", "ok")
     return redirect(back)
 
 

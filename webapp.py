@@ -360,13 +360,27 @@ def parse_fixed_times(values):
     return sorted(set(out))
 
 
+def fixed_active_on(ch: dict, day) -> bool:
+    """Les heures fixes s'appliquent-elles ce jour ? Oui si définies et (permanentes
+    OU date du jour <= `fixed_until`)."""
+    if not ch.get("fixed_times"):
+        return False
+    fu = ch.get("fixed_until")
+    if not fu:
+        return True  # permanent
+    try:
+        return day <= datetime.fromisoformat(fu).date()
+    except (ValueError, TypeError):
+        return True
+
+
 def generate_times(ch: dict, now: datetime):
-    """Heures de publication du jour. Si la chaîne a des `fixed_times` (HH:MM choisies
-    à la main), on les utilise telles quelles ; sinon on tire `posts_per_day` horaires
-    aléatoires dans la fenêtre [start, end]."""
+    """Heures de publication du jour. Si la chaîne a des `fixed_times` actives (fixes,
+    permanentes ou temporaires non expirées), on les utilise telles quelles ; sinon on
+    tire `posts_per_day` horaires aléatoires dans la fenêtre [start, end]."""
     day = now.date()
     fixed = parse_fixed_times(ch.get("fixed_times", []))
-    if fixed:
+    if fixed and fixed_active_on(ch, day):
         return [datetime.combine(day, dtime(h, mn), tzinfo=TZ) for h, mn in fixed]
     n = int(ch.get("posts_per_day", 0))
     ws, we = int(ch["window_start"]), int(ch["window_end"])
@@ -401,8 +415,27 @@ def plan_channel(name: str):
             )
 
 
+def expire_fixed_times():
+    """Efface les heures fixes temporaires arrivées à échéance (revient à l'aléatoire)."""
+    today = datetime.now(TZ).date()
+    changed = False
+    for ch in config["channels"].values():
+        fu = ch.get("fixed_until")
+        if ch.get("fixed_times") and fu:
+            try:
+                if today > datetime.fromisoformat(fu).date():
+                    ch["fixed_times"] = []
+                    ch["fixed_until"] = None
+                    changed = True
+            except (ValueError, TypeError):
+                pass
+    if changed:
+        save_config()
+
+
 def plan_day():
     """Recalcule les horaires du jour et (re)programme les jobs futurs (toutes chaînes)."""
+    expire_fixed_times()
     for job in scheduler.get_jobs():
         if job.id.startswith("post:"):
             job.remove()
@@ -641,6 +674,15 @@ def build_spa_data() -> list:
         connected = token_path(name).exists()
         totals = fetch_channel_totals(name) if connected else None
         daily = (fetch_analytics_daily(name) if connected else None) or []
+        ft = list(ch.get("fixed_times", []))
+        fu = ch.get("fixed_until")
+        fixed_dur = "permanent"
+        if ft and fu:
+            try:
+                rem = (datetime.fromisoformat(fu).date() - now.date()).days + 1
+                fixed_dur = str(rem) if rem in (1, 2, 3, 7, 14) else "permanent"
+            except (ValueError, TypeError):
+                fixed_dur = "permanent"
         chans.append({
             "id": name,
             "connected": connected,
@@ -655,7 +697,9 @@ def build_spa_data() -> list:
                 "start": int(ch.get("window_start", 0)),
                 "end": int(ch.get("window_end", 0)),
                 "privacy": ch.get("privacy", "public"),
-                "fixedTimes": list(ch.get("fixed_times", [])),  # ["HH:MM", ...] ou []
+                "fixedTimes": ft,            # ["HH:MM", ...] ou []
+                "fixedUntil": fu,            # "YYYY-MM-DD" (temporaire) ou None (permanent)
+                "fixedDuration": fixed_dur,  # "permanent" | "1" | "2" | "3" | "7" | "14"
             },
             "slots": [t.strftime("%H:%M") for t in SCHEDULE_TODAY.get(name, []) if t > now],
             "pending": len(find_jobs(folder, state)),
@@ -759,12 +803,26 @@ def channel_settings(name):
     # Heures fixes saisies à la main (HH:MM séparées par virgule/espace). Vide = aléatoire.
     fixed = parse_fixed_times(request.form.get("fixed_times", ""))
     ch["fixed_times"] = ["%02d:%02d" % (h, m) for h, m in fixed]
+    # Durée : "permanent" (jusqu'à changement) ou un nombre de jours (1 = aujourd'hui).
+    dur = request.form.get("fixed_duration", "permanent")
+    if not ch["fixed_times"] or dur == "permanent":
+        ch["fixed_until"] = None
+    else:
+        try:
+            n = max(1, int(dur))
+        except ValueError:
+            n = 1
+        ch["fixed_until"] = (datetime.now(TZ).date() + timedelta(days=n - 1)).isoformat()
     save_config()
     plan_day()  # les changements prennent effet immédiatement
-    if ch["fixed_times"]:
-        flash("Réglages enregistrés — heures fixes : " + ", ".join(ch["fixed_times"]), "ok")
-    else:
+    if not ch["fixed_times"]:
         flash("Réglages enregistrés — heures aléatoires dans la fenêtre.", "ok")
+    elif ch["fixed_until"]:
+        flash("Réglages enregistrés — heures fixes %s jusqu'au %s inclus."
+              % (", ".join(ch["fixed_times"]), ch["fixed_until"]), "ok")
+    else:
+        flash("Réglages enregistrés — heures fixes permanentes : "
+              + ", ".join(ch["fixed_times"]), "ok")
     return redirect(url_for("channel", name=name))
 
 

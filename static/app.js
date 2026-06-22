@@ -389,9 +389,21 @@
             '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Confidentialité par défaut</span>' + privSel("privacy", c.settings.privacy) + "</div>" +
             '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Début (h)</span><input type="number" name="window_start" value="' + c.settings.start + '" class="foc" style="' + S.input + '"></div>' +
             '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Fin (h)</span><input type="number" name="window_end" value="' + c.settings.end + '" class="foc" style="' + S.input + '"></div></div>' +
-          '<div style="display:flex;flex-direction:column;gap:6px;margin-top:13px;"><span style="' + S.field + '">Heures fixes (optionnel)</span>' +
-            '<input type="text" name="fixed_times" value="' + esc((c.settings.fixedTimes || []).join(", ")) + '" placeholder="ex. 11:30, 14:00, 18:00 — vide = aléatoire" class="foc" style="' + S.input + '"></div>' +
-          '<div style="font-size:11.5px;color:#777;margin-top:8px;line-height:1.5;">Si renseigné, les vidéos partent à <b style="color:#9a9a9a;">ces heures précises</b> chaque jour (la fenêtre et « vidéos/jour » sont alors ignorés). Vide = horaires aléatoires dans la fenêtre.</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:13px;align-items:end;">' +
+            '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Heures fixes (optionnel)</span>' +
+              '<input type="text" name="fixed_times" value="' + esc((c.settings.fixedTimes || []).join(", ")) + '" placeholder="ex. 11:30, 18:00 — vide = aléatoire" class="foc" style="' + S.input + '"></div>' +
+            '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Durée</span>' +
+              '<select name="fixed_duration" class="foc" style="' + S.input + 'cursor:pointer;">' +
+                [["permanent", "Permanent (jusqu'à changement)"], ["1", "Aujourd'hui seulement"], ["2", "2 jours"], ["3", "3 jours"], ["7", "7 jours"], ["14", "14 jours"]]
+                  .map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === (c.settings.fixedDuration || "permanent") ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") +
+              "</select></div></div>" +
+          '<div style="font-size:11.5px;color:#777;margin-top:8px;line-height:1.5;">' +
+            ((c.settings.fixedTimes || []).length
+              ? (c.settings.fixedUntil
+                  ? "Heures fixes <b style=\"color:#9a9a9a;\">jusqu'au " + esc(c.settings.fixedUntil) + " inclus</b>, puis retour à l'aléatoire."
+                  : "Heures fixes <b style=\"color:#9a9a9a;\">permanentes</b> (jusqu'à changement).")
+              : "Heures <b style=\"color:#9a9a9a;\">aléatoires</b> dans la fenêtre. Renseigne des heures pour les fixer.") +
+            " La fenêtre et « vidéos/jour » sont ignorés quand des heures fixes sont actives.</div>" +
           '<div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#202020;border:1px solid #2c2c2c;">' +
             '<div style="' + S.field + '">Créneaux du jour</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;">' +
             (c.settings.active && c.slots.length ? c.slots.map(function (s) { return '<span style="font-family:\'IBM Plex Mono\';font-size:12px;background:#2c2c2c;color:#ededed;border-radius:6px;padding:5px 10px;">' + esc(s) + "</span>"; }).join("") : '<span style="font-size:13px;color:#777;">Aucun créneau — planification inactive ou déjà passés.</span>') + "</div></div>" +

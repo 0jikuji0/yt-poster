@@ -25,6 +25,13 @@
     return i < 0 ? 0 : i;
   }
   function isGlobal() { return view === "global"; }
+  // Chaînes triées pour l'affichage : actives (planification ON) d'abord.
+  // (le tri JS est stable → l'ordre d'origine est conservé à égalité)
+  function sortedChannels() {
+    return channels.slice().sort(function (a, b) {
+      return (b.settings.active ? 1 : 0) - (a.settings.active ? 1 : 0);
+    });
+  }
   function lastF(arr, key) { return arr.length ? arr[arr.length - 1][key] : 0; }
   function round(n) { return Math.round(n * 10) / 10; }
   function shortD(d) { var p = String(d).split("-"); return p.length === 3 ? p[2] + "/" + p[1] : d; }
@@ -147,7 +154,7 @@
 
   // ---- sidebar ----
   function sidebar() {
-    var items = channels.map(function (c) {
+    var items = sortedChannels().map(function (c) {
       var on = !isGlobal() && c.id === view;
       return '<button data-navch="' + esc(c.id) + '" class="hov-item" style="position:relative;display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:none;cursor:pointer;border-radius:9px;padding:10px 10px 10px 14px;margin-bottom:3px;color:#fff;background:' + (on ? "#1f1f1f" : "transparent") + ';">' +
         '<span style="position:absolute;left:4px;top:10px;bottom:10px;width:2px;border-radius:2px;background:' + (on ? COL.chart : "transparent") + ';"></span>' +
@@ -198,7 +205,7 @@
     var gV = computeChart(gF, "views"), gS = computeChart(gF, "subs");
     var gvg = gain(gF, "views"), gsg = gain(gF, "subs");
 
-    var cards = channels.map(function (c, i) {
+    var cards = sortedChannels().map(function (c, i) {
       var f = filterRange(c.readings), sg = gain(f, "subs");
       return '<button data-navch="' + esc(c.id) + '" class="hov-card" style="min-width:0;text-align:left;cursor:pointer;border:1px solid #2c2c2c;background:#202020;border-radius:10px;padding:14px 15px;display:flex;flex-direction:column;gap:12px;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +

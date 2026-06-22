@@ -433,6 +433,8 @@ def start_scheduler():
         return
     # Replanifie chaque nuit à 00h01, et tout de suite pour le reste de la journée.
     scheduler.add_job(plan_day, "cron", hour=0, minute=1, id="planner")
+    # Relevé quotidien des stats YouTube (vues + abonnés) à 23h30, même sans visite.
+    scheduler.add_job(snapshot_all, "cron", hour=23, minute=30, id="daily-stats")
     scheduler.start()
     plan_day()
 
@@ -521,6 +523,19 @@ def record_snapshot(name: str, force: bool = False) -> bool:
     config["channels"][name]["views"] = lst
     save_config()
     return True
+
+
+def snapshot_all():
+    """Relevé quotidien automatique des stats YouTube (toutes chaînes connectées).
+    Appelé par le planificateur une fois par jour."""
+    n = 0
+    for name in list(config["channels"]):
+        try:
+            if record_snapshot(name, force=True):
+                n += 1
+        except Exception as e:
+            log.warning("[%s] relevé quotidien échoué : %s", name, e)
+    log.info("Relevé quotidien YouTube : %d chaîne(s) mise(s) à jour.", n)
 
 
 def build_spa_data() -> list:

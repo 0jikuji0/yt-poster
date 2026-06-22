@@ -72,9 +72,17 @@
     return Object.keys(map).sort().map(function (dt) { return { date: dt, views: map[dt].views, subs: map[dt].subs }; });
   }
   function globalTotals() {
-    var v = 0, s = 0, any = false;
-    channels.forEach(function (c) { if (c.totals) { v += c.totals.views; s += c.totals.subs; any = true; } });
-    return any ? { views: v, subs: s } : null;
+    var v = 0, s = 0, vid = 0, any = false;
+    channels.forEach(function (c) { if (c.totals) { v += c.totals.views; s += c.totals.subs; vid += c.totals.videos || 0; any = true; } });
+    return any ? { views: v, subs: s, videos: vid } : null;
+  }
+  // Moyennes : vues par short (vues totales / nb vidéos) et vues par jour (sur la période)
+  function avgPerShort(totals) { return totals && totals.videos ? Math.round(totals.views / totals.videos) : null; }
+  function avgPerDay(daily) { var f = filterRange(daily); return f.length ? Math.round(f.reduce(function (a, b) { return a + b.views; }, 0) / f.length) : null; }
+  function avgLine(totals, daily) {
+    return '<div style="font-family:\'IBM Plex Mono\';font-size:12px;color:#8a8a8a;margin:14px 0 0;">' +
+      'Moyenne : <b style="color:#ededed;">' + num(avgPerShort(totals)) + '</b> vues / short · ' +
+      '<b style="color:#ededed;">' + num(avgPerDay(daily)) + '</b> vues / jour (' + rangeLabel() + ')</div>';
   }
   function seriesChannel(c) { var d = c.daily || []; return mode === "cum" ? cumulative(d, c.totals) : d.slice(); }
   function seriesGlobal() { var d = globalDaily(); return mode === "cum" ? cumulative(d, globalTotals()) : d; }
@@ -207,13 +215,17 @@
         '<form method="post" action="/channels/add" style="display:flex;gap:6px;margin-top:8px;padding:0 2px;">' +
           '<input name="name" placeholder="+ ajouter" style="' + S.input + 'flex:1;min-width:0;padding:7px 9px;font-size:12px;" class="foc">' +
           '<button class="hov-ghost" style="' + S.ghost + 'padding:7px 10px;">OK</button></form></div>' +
+      '<div style="padding:2px 14px 8px;border-top:1px solid #1f1f1f;margin-top:6px;padding-top:12px;">' +
+        '<a href="/library" class="hov-item" style="display:flex;align-items:center;gap:10px;border-radius:9px;padding:10px 12px;color:#ededed;text-decoration:none;font-size:13px;font-weight:500;">📚 Bibliothèque</a>' +
+        '<a href="/logs" class="hov-item" style="display:flex;align-items:center;gap:10px;border-radius:9px;padding:10px 12px;margin-top:2px;color:#ededed;text-decoration:none;font-size:13px;font-weight:500;">🗒️ Logs</a>' +
+      "</div>" +
       '<div style="margin-top:auto;padding:14px;border-top:1px solid #1f1f1f;">' +
         '<div style="font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.13em;color:#6f6f6f;text-transform:uppercase;padding:0 8px 8px;">Clés partagées</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:9px;background:#171717;">' +
           '<span style="font-family:\'IBM Plex Mono\';font-size:11px;color:#cfcfcf;">client_secret.json</span>' +
           '<span style="font-size:10px;color:' + secretCol + ';font-family:\'IBM Plex Mono\';">' + secretTxt + "</span></div>" +
-        '<div style="margin-top:12px;padding:0 8px;font-family:\'IBM Plex Mono\';font-size:11px;display:flex;gap:10px;flex-wrap:wrap;">' +
-          '<a class="muted-link" href="/library">Bibliothèque</a><a class="muted-link" href="/logs">Logs</a><a class="muted-link" href="/logout">Déconnexion</a></div></div>' +
+        '<div style="margin-top:12px;padding:0 8px;font-family:\'IBM Plex Mono\';font-size:11px;">' +
+          '<a class="muted-link" href="/logout">Déconnexion</a></div></div>' +
       "</aside>";
   }
 
@@ -253,6 +265,7 @@
           kpi("Abonnés", num(gt ? gt.subs : null), COL.subs) +
           kpi("Vues gagnées · " + rangeLabel(), gainLabel(vg), gainColor(vg)) +
           kpi("Abonnés gagnés · " + rangeLabel(), gainLabel(sg), gainColor(sg)) + "</div>" +
+        avgLine(gt, gd) +
         '<div style="margin-top:22px;padding-top:20px;border-top:1px solid #262626;">' +
           chartTitle(COL.chart, "Vues") + chartSVG(cV, COL.chart) +
           '<div style="margin:22px 0 0;">' + chartTitle(COL.subs, "Abonnés") + chartSVG(cS, COL.subs) + "</div></div></section>" +
@@ -315,7 +328,8 @@
           kpi("Abonnés", num(c.totals ? c.totals.subs : null), COL.subs) +
           kpi("Vues gagnées · " + rangeLabel(), gainLabel(vg), gainColor(vg)) +
           kpi("Abonnés gagnés · " + rangeLabel(), gainLabel(sg), gainColor(sg)) + "</div>" +
-        chartTitle(COL.chart, "Vues") + chartSVG(cV, COL.chart) +
+        avgLine(c.totals, daily) +
+        '<div style="margin-top:22px;">' + chartTitle(COL.chart, "Vues") + chartSVG(cV, COL.chart) + "</div>" +
         '<div style="margin:22px 0 0;">' + chartTitle(COL.subs, "Abonnés") + chartSVG(cS, COL.subs) + "</div>" +
         '<div style="border:1px solid #2c2c2c;border-radius:10px;overflow:hidden;margin-top:22px;">' +
           '<div style="display:grid;grid-template-columns:1.3fr 0.9fr 0.9fr 0.9fr;align-items:center;padding:11px 16px;background:#202020;font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#8a8a8a;font-weight:500;">' +

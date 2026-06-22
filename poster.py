@@ -37,8 +37,13 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-# Scope minimal : on demande uniquement le droit d'uploader.
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+# Scopes : droit d'uploader + lecture seule (pour récupérer les statistiques :
+# abonnés, vues totales de la chaîne, vues/likes/commentaires par vidéo).
+# NB : changer les scopes invalide les tokens existants → reconnecter les chaînes.
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".m4v"}
 

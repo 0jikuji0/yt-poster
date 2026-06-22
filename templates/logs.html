@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Logs — yt-poster{% endblock %}
+{% block content %}
+<div class="row between">
+  <h1>Journal</h1>
+  <a class="btn" href="{{ url_for('logs_page', channel=sel) if sel else url_for('logs_page') }}">↻ Rafraîchir</a>
+</div>
+
+<!-- Filtre par chaîne -->
+<div class="tabs">
+  <a class="tab {{ 'active' if not sel }}" href="{{ url_for('logs_page') }}">Toutes</a>
+  {% for n in names %}
+  <a class="tab {{ 'active' if sel == n }}" href="{{ url_for('logs_page', channel=n) }}">{{ n }}</a>
+  {% endfor %}
+</div>
+
+{% if lines %}
+<pre class="logs">{% for line in lines %}{{ line }}
+{% endfor %}</pre>
+{% else %}
+<div class="card"><p class="muted">Aucune ligne de journal{% if sel %} pour « {{ sel }} »{% endif %} pour l'instant.</p></div>
+{% endif %}
+{% endblock %}

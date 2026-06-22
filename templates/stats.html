@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Stats — yt-poster{% endblock %}
+{% block content %}
+<h1>Statistiques</h1>
+
+<!-- KPIs globaux -->
+<div class="kpis">
+  <div class="kpi"><span class="num">{{ stats.total_posted }}</span><span class="lbl">vidéos postées (global)</span></div>
+  <div class="kpi"><span class="num">{{ stats.total_pending }}</span><span class="lbl">en file d'attente</span></div>
+  <div class="kpi"><span class="num">{{ stats.n_connected }}/{{ stats.n_channels }}</span><span class="lbl">chaînes connectées</span></div>
+</div>
+
+<!-- Filtre par chaîne -->
+<div class="tabs">
+  <a class="tab {{ 'active' if not sel }}" href="{{ url_for('stats') }}">Toutes</a>
+  {% for c in channels %}
+  <a class="tab {{ 'active' if sel == c.name }}" href="{{ url_for('stats', channel=c.name) }}">
+    {{ c.cfg.title or c.name }}
+  </a>
+  {% endfor %}
+</div>
+
+{% if not detail %}
+<!-- Vue globale : postées par chaîne -->
+<div class="card">
+  <h2>Vidéos postées par chaîne</h2>
+  {% for c in channels %}
+  <div class="bar-row">
+    <span class="bar-name">{{ c.cfg.title or c.name }}</span>
+    <div class="bar-track">
+      <div class="bar-fill" style="width: {{ (100 * c.posted / stats.max_posted) if stats.max_posted else 0 }}%"></div>
+    </div>
+    <span class="bar-val">{{ c.posted }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>En file d'attente par chaîne</h2>
+  {% for c in channels %}
+  <div class="row between" style="padding:6px 0;border-bottom:1px solid var(--line-soft)">
+    <span>{{ c.cfg.title or c.name }}</span>
+    <span><b>{{ c.pending }}</b> en file · <b>{{ c.posted }}</b> postées · {{ c.cfg.posts_per_day }}/jour</span>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<!-- Détail d'une chaîne -->
+{% set yt = detail.yt %}
+{% macro fmt(n) %}{{ "{:,}".format(n).replace(',', ' ') }}{% endmacro %}
+
+<div class="row between">
+  <h2 style="margin:0">{{ detail.cfg.title or detail.name }}</h2>
+  <div class="row">
+    <a class="btn" href="{{ url_for('stats', channel=detail.name, refresh=1) }}">↻ Actualiser les stats</a>
+    <a class="btn" href="{{ url_for('channel', name=detail.name) }}">Gérer cette chaîne</a>
+  </div>
+</div>
+
+{% if yt and yt.error %}
+<div class="flash error">{{ yt.error }}</div>
+{% endif %}
+
+<!-- Stats live YouTube (API) -->
+{% if yt and yt.channel %}
+<div class="kpis">
+  <div class="kpi"><span class="num">{% if yt.channel.subs_hidden %}—{% else %}{{ fmt(yt.channel.subs) }}{% endif %}</span><span class="lbl">abonnés</span></div>
+  <div class="kpi"><span class="num">{{ fmt(yt.channel.views) }}</span><span class="lbl">vues totales (chaîne)</span></div>
+  <div class="kpi"><span class="num">{{ fmt(yt.channel.videos) }}</span><span class="lbl">vidéos sur la chaîne</span></div>
+  <div class="kpi"><span class="num">{{ fmt(yt.total_views) }}</span><span class="lbl">vues cumulées (postées ici)</span></div>
+</div>
+<p class="muted">{{ yt.n_live }} vidéo(s) postée(s) via l'outil · {{ fmt(yt.total_likes) }} likes · {{ fmt(yt.total_comments) }} commentaires{% if yt.fetched_at %} · maj {{ yt.fetched_at }}{% endif %}</p>
+{% endif %}
+
+<!-- Récap local (planification) -->
+<div class="kpis">
+  <div class="kpi"><span class="num">{{ detail.st.posted }}</span><span class="lbl">postées (suivi local)</span></div>
+  <div class="kpi"><span class="num">{{ detail.st.pending }}</span><span class="lbl">en file</span></div>
+  <div class="kpi"><span class="num">{{ detail.cfg.posts_per_day }}</span><span class="lbl">vidéos/jour</span></div>
+  <div class="kpi"><span class="num">{{ detail.cfg.window_start }}–{{ detail.cfg.window_end }}h</span><span class="lbl">fenêtre</span></div>
+</div>
+
+<!-- Détail par vidéo postée -->
+{% if yt and yt.videos %}
+<div class="card">
+  <h2>Vidéos postées — par nombre de vues</h2>
+  <table class="views">
+    <tr><th>Vidéo</th><th>Vues</th><th>Likes</th><th>Commentaires</th></tr>
+    {% for v in yt.videos %}
+    <tr>
+      <td style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <a href="{{ v.url }}" target="_blank" rel="noopener">{{ v.title }}</a>
+      </td>
+      <td>{{ fmt(v.views) }}</td>
+      <td>{{ fmt(v.likes) }}</td>
+      <td>{{ fmt(v.comments) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Suivi manuel des vues (relevés)</h2>
+  {% if detail.spark %}
+  <svg class="spark" viewBox="0 0 {{ detail.spark.w }} {{ detail.spark.h }}" preserveAspectRatio="none">
+    <polyline points="{{ detail.spark.points }}" fill="none" stroke="#fff" stroke-width="2"/>
+  </svg>
+  <p class="muted">min {{ "{:,}".format(detail.spark.vmin).replace(',', ' ') }} · max {{ "{:,}".format(detail.spark.vmax).replace(',', ' ') }} vues</p>
+  {% else %}
+  <p class="muted">Pas assez de relevés de vues pour tracer une courbe (ajoute-les sur la page de la chaîne).</p>
+  {% endif %}
+
+  {% if detail.views %}
+  <table class="views">
+    <tr><th>Date</th><th>Vues</th><th>Évolution</th></tr>
+    {% for r in detail.views %}
+    <tr>
+      <td>{{ r.date }}</td>
+      <td>{{ "{:,}".format(r.views).replace(',', ' ') }}</td>
+      <td>
+        {% if r.delta is none %}—
+        {% elif r.delta >= 0 %}<span class="up">+{{ "{:,}".format(r.delta).replace(',', ' ') }}</span>
+        {% else %}<span class="down">{{ "{:,}".format(r.delta).replace(',', ' ') }}</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

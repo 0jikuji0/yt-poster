@@ -12,6 +12,8 @@
     {% if session.get('logged_in') %}
       <nav><a href="{{ url_for('dashboard') }}">Tableau de bord</a>
            <a href="{{ url_for('library') }}">Bibliothèque</a>
+           <a href="{{ url_for('stats') }}">Stats</a>
+           <a href="{{ url_for('logs_page') }}">Logs</a>
            <a href="{{ url_for('logout') }}">Déconnexion</a></nav>
     {% endif %}
   </header>

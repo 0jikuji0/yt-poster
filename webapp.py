@@ -217,6 +217,80 @@ def fetch_channel_title(name: str):
     return None
 
 
+# Cache mémoire des stats YouTube : nom -> (timestamp epoch, data). Évite de
+# rappeler l'API à chaque chargement de page (quota + latence).
+_STATS_CACHE: dict = {}
+STATS_TTL = 600  # secondes (10 min)
+
+
+def fetch_youtube_stats(name: str, force: bool = False) -> dict:
+    """Récupère les stats via l'API : abonnés + vues totales de la chaîne, et
+    vues/likes/commentaires de chaque vidéo postée (via les video_id stockés).
+    Renvoie un dict avec une clé 'error' explicite si le scope manque (403)."""
+    now = datetime.now(TZ).timestamp()
+    cached = _STATS_CACHE.get(name)
+    if cached and not force and now - cached[0] < STATS_TTL:
+        return cached[1]
+
+    data = {"channel": None, "videos": [], "total_views": 0, "total_likes": 0,
+            "total_comments": 0, "n_live": 0, "error": None, "fetched_at": None}
+
+    youtube = get_youtube(name)
+    if not youtube:
+        data["error"] = "Chaîne non connectée."
+        return data
+
+    try:
+        # --- Niveau chaîne (1 unité de quota) ---
+        resp = youtube.channels().list(part="statistics,snippet", mine=True).execute()
+        items = resp.get("items", [])
+        if items:
+            s = items[0]["statistics"]
+            data["channel"] = {
+                "title": items[0]["snippet"]["title"],
+                "subs": int(s.get("subscriberCount", 0)),
+                "subs_hidden": s.get("hiddenSubscriberCount", False),
+                "views": int(s.get("viewCount", 0)),
+                "videos": int(s.get("videoCount", 0)),
+            }
+
+        # --- Par vidéo postée (1 unité par lot de 50 IDs) ---
+        state = load_state(channel_folder(name) / ".uploaded.json")
+        ids = [info["video_id"] for info in state.values() if info.get("video_id")]
+        vids = []
+        for i in range(0, len(ids), 50):
+            batch = ids[i:i + 50]
+            rv = youtube.videos().list(part="statistics,snippet",
+                                       id=",".join(batch)).execute()
+            for it in rv.get("items", []):
+                st = it.get("statistics", {})
+                vids.append({
+                    "id": it["id"],
+                    "url": f"https://youtu.be/{it['id']}",
+                    "title": it["snippet"]["title"],
+                    "views": int(st.get("viewCount", 0)),
+                    "likes": int(st.get("likeCount", 0)),
+                    "comments": int(st.get("commentCount", 0)),
+                })
+        vids.sort(key=lambda v: v["views"], reverse=True)
+        data["videos"] = vids
+        data["n_live"] = len(vids)
+        data["total_views"] = sum(v["views"] for v in vids)
+        data["total_likes"] = sum(v["likes"] for v in vids)
+        data["total_comments"] = sum(v["comments"] for v in vids)
+        data["fetched_at"] = datetime.now(TZ).strftime("%H:%M")
+    except HttpError as e:
+        if "insufficient" in str(e).lower() or e.resp.status == 403:
+            data["error"] = ("Permission de lecture manquante. Reconnecte la chaîne "
+                             "(bouton « Connecter ») pour autoriser l'accès aux stats.")
+        else:
+            data["error"] = f"Erreur API : {e}"
+        log.warning("[%s] échec récupération stats : %s", name, e)
+
+    _STATS_CACHE[name] = (now, data)
+    return data
+
+
 def ensure_sidecars(name: str) -> int:
     """Crée un .json par défaut (titre = nom du fichier) pour toute vidéo du dossier
     qui n'en a pas. Permet de déposer des vidéos en SSH sans préparer les métadonnées."""
@@ -439,6 +513,55 @@ def dashboard():
     return render_template("dashboard.html", channels=channels,
                            logs=list(LOG_BUFFER)[:60], stats=stats,
                            has_secrets=SECRETS_PATH.exists())
+
+
+@app.route("/stats")
+@login_required
+def stats():
+    """Stats globales + détail filtrable par chaîne."""
+    channels = [channel_status(n) for n in config["channels"]]
+    totals = {
+        "total_posted": sum(c["posted"] for c in channels),
+        "total_pending": sum(c["pending"] for c in channels),
+        "n_channels": len(channels),
+        "n_connected": sum(1 for c in channels if c["connected"]),
+        "max_posted": max((c["posted"] for c in channels), default=0),
+    }
+    sel = request.args.get("channel") or ""
+    if sel not in config["channels"]:
+        sel = ""
+    detail = None
+    if sel:
+        ch = config["channels"][sel]
+        views = sorted(ch.get("views", []), key=lambda e: e["date"])
+        rows, prev = [], None
+        for e in views:
+            delta = None if prev is None else int(e["views"]) - prev
+            rows.append({"date": e["date"], "views": int(e["views"]), "delta": delta})
+            prev = int(e["views"])
+        detail = {
+            "name": sel, "cfg": ch,
+            "st": next((c for c in channels if c["name"] == sel), None),
+            "views": list(reversed(rows)),
+            "spark": views_sparkline(views),
+            "yt": fetch_youtube_stats(sel, force=request.args.get("refresh") == "1"),
+        }
+    return render_template("stats.html", channels=channels, stats=totals,
+                           sel=sel, detail=detail)
+
+
+@app.route("/logs")
+@login_required
+def logs_page():
+    """Journal récent, filtrable par chaîne (lignes contenant son nom)."""
+    sel = request.args.get("channel") or ""
+    if sel not in config["channels"]:
+        sel = ""
+    lines = list(LOG_BUFFER)
+    if sel:
+        lines = [ln for ln in lines if sel in ln]
+    return render_template("logs.html", lines=lines[:300],
+                           names=list(config["channels"]), sel=sel)
 
 
 def views_sparkline(views, w=600, h=140, pad=14):

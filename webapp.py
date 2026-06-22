@@ -502,6 +502,7 @@ def logout():
 # Caches mémoire (TTL) pour ne pas marteler l'API à chaque chargement de page.
 _TOTALS_CACHE: dict = {}     # nom -> (epoch, {subs, views, videos} | None)
 _ANALYTICS_CACHE: dict = {}  # nom -> (epoch, [ {date, views, subs}, ... ])
+_ANALYTICS_ERR: dict = {}    # nom -> dernière erreur API (texte) si échec
 TOTALS_TTL = 600
 ANALYTICS_TTL = 1800
 ANALYTICS_DAYS = 120
@@ -555,8 +556,14 @@ def fetch_analytics_daily(name: str, force: bool = False):
         rows = resp.get("rows", []) or []
         out = [{"date": r[0], "views": int(r[1]), "subs": int(r[2]) - int(r[3])} for r in rows]
         out.sort(key=lambda e: e["date"])
+        _ANALYTICS_ERR.pop(name, None)
     except HttpError as e:
         log.warning("[%s] analytics indisponibles : %s", name, e)
+        _ANALYTICS_ERR[name] = str(e)
+        out = None
+    except Exception as e:
+        log.warning("[%s] analytics erreur : %s", name, e)
+        _ANALYTICS_ERR[name] = str(e)
         out = None
     _ANALYTICS_CACHE[name] = (now, out)
     return out
@@ -1034,8 +1041,19 @@ def sync_views(name):
         flash("Lecture impossible — reconnecte la chaîne pour autoriser l'accès aux stats.", "error")
         return redirect(back)
     if daily is None:
-        flash("Stats par jour indisponibles — reconnecte la chaîne pour autoriser "
-              "l'accès YouTube Analytics (nouveau).", "error")
+        err = _ANALYTICS_ERR.get(name, "")
+        low = err.lower()
+        if "has not been used" in low or "accessnotconfigured" in low or "service_disabled" in low or "is disabled" in low:
+            flash("L'API « YouTube Analytics API » n'est PAS activée dans ton projet Google "
+                  "Cloud. Active-la sur console.cloud.google.com (API & services → "
+                  "Bibliothèque → « YouTube Analytics API » → Activer), attends 1-2 min, "
+                  "puis re-synchronise.", "error")
+        elif "insufficient" in low or "scope" in low or "forbidden" in low or "403" in low:
+            flash("Accès Analytics refusé (scope). Reconnecte la chaîne et accepte la "
+                  "permission « Voir tes rapports YouTube Analytics ».", "error")
+        else:
+            flash("Stats par jour indisponibles. Détail API : "
+                  + (err[:300] or "erreur inconnue"), "error")
         return redirect(back)
     flash(f"Synchronisé ✓ {totals['subs']} abonnés · {totals['views']} vues · "
           f"{len(daily)} jour(s) de données.", "ok")

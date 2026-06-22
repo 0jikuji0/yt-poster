@@ -23,6 +23,7 @@ import io
 import logging
 import os
 import random
+import re
 import threading
 from collections import defaultdict, deque
 from datetime import datetime, time as dtime, timedelta
@@ -340,13 +341,37 @@ SCHEDULE_TODAY: dict = {}     # nom -> [datetime, ...] prévus aujourd'hui
 _post_lock = threading.Lock()
 
 
+def parse_fixed_times(values):
+    """Convertit une liste/chaîne d'heures « HH:MM » en [(h, m), ...] valides et triées."""
+    if isinstance(values, str):
+        values = re.split(r"[\s,;]+", values)
+    out = []
+    for v in values:
+        v = (v or "").strip()
+        if not v:
+            continue
+        m = re.match(r"^(\d{1,2})[:hH](\d{2})$", v) or re.match(r"^(\d{1,2})$", v)
+        if not m:
+            continue
+        h = int(m.group(1))
+        mn = int(m.group(2)) if m.lastindex and m.lastindex >= 2 else 0
+        if 0 <= h <= 23 and 0 <= mn <= 59:
+            out.append((h, mn))
+    return sorted(set(out))
+
+
 def generate_times(ch: dict, now: datetime):
-    """Tire `posts_per_day` horaires aléatoires dans la fenêtre [start, end] du jour."""
+    """Heures de publication du jour. Si la chaîne a des `fixed_times` (HH:MM choisies
+    à la main), on les utilise telles quelles ; sinon on tire `posts_per_day` horaires
+    aléatoires dans la fenêtre [start, end]."""
+    day = now.date()
+    fixed = parse_fixed_times(ch.get("fixed_times", []))
+    if fixed:
+        return [datetime.combine(day, dtime(h, mn), tzinfo=TZ) for h, mn in fixed]
     n = int(ch.get("posts_per_day", 0))
     ws, we = int(ch["window_start"]), int(ch["window_end"])
     if n <= 0 or we <= ws:
         return []
-    day = now.date()
     start = datetime.combine(day, dtime(ws, 0), tzinfo=TZ)
     end = datetime.combine(day, dtime(we, 0), tzinfo=TZ)
     total = (end - start).total_seconds()
@@ -569,6 +594,41 @@ def fetch_analytics_daily(name: str, force: bool = False):
     return out
 
 
+def compute_best_hours(name: str):
+    """Analyse « meilleures heures de publication » : croise l'heure de mise en ligne
+    de chaque vidéo postée (uploaded_at) avec ses vues (API), normalisé par l'âge
+    (vues/jour) pour comparer équitablement vidéos récentes et anciennes.
+    Retourne [{hour, count, avgPerDay, totalViews}] trié par heure, ou None."""
+    stats = fetch_youtube_stats(name)
+    if not stats or stats.get("error"):
+        return None
+    views_by_id = {v["id"]: v["views"] for v in stats.get("videos", [])}
+    if not views_by_id:
+        return []
+    state = load_state(channel_folder(name) / ".uploaded.json")
+    now = datetime.now(TZ)
+    buckets = {}  # heure (0-23) -> {n, vpd (somme), views (somme)}
+    for info in state.values():
+        vid, ts = info.get("video_id"), info.get("uploaded_at")
+        if not vid or not ts or vid not in views_by_id:
+            continue
+        try:
+            dt_ = datetime.fromisoformat(ts)
+        except ValueError:
+            continue
+        if dt_.tzinfo is None:
+            dt_ = dt_.replace(tzinfo=TZ)
+        hour = dt_.astimezone(TZ).hour
+        age_days = max(1.0, (now - dt_).total_seconds() / 86400.0)
+        vpd = views_by_id[vid] / age_days
+        b = buckets.setdefault(hour, {"n": 0, "vpd": 0.0, "views": 0})
+        b["n"] += 1
+        b["vpd"] += vpd
+        b["views"] += views_by_id[vid]
+    return [{"hour": h, "count": b["n"], "avgPerDay": round(b["vpd"] / b["n"], 1),
+             "totalViews": b["views"]} for h, b in sorted(buckets.items())]
+
+
 def build_spa_data() -> list:
     """Données injectées dans la SPA (front « clipstudio ») : une entrée par chaîne
     avec stats par jour (Analytics), totaux, réglages, créneaux du jour et statut."""
@@ -588,12 +648,14 @@ def build_spa_data() -> list:
             "ytTitle": ch.get("title") or "—",
             "daily": daily,            # [{date, views (jour), subs (Δ jour)}]
             "totals": totals,          # {subs, views, videos} ou None
+            "hours": compute_best_hours(name) if connected else None,  # analyse heures
             "settings": {
                 "active": bool(ch.get("enabled")),
                 "perDay": int(ch.get("posts_per_day", 0)),
                 "start": int(ch.get("window_start", 0)),
                 "end": int(ch.get("window_end", 0)),
                 "privacy": ch.get("privacy", "public"),
+                "fixedTimes": list(ch.get("fixed_times", [])),  # ["HH:MM", ...] ou []
             },
             "slots": [t.strftime("%H:%M") for t in SCHEDULE_TODAY.get(name, []) if t > now],
             "pending": len(find_jobs(folder, state)),
@@ -694,9 +756,15 @@ def channel_settings(name):
     ch["window_start"] = min(23, max(0, int(request.form.get("window_start", ch["window_start"]))))
     ch["window_end"] = min(24, max(0, int(request.form.get("window_end", ch["window_end"]))))
     ch["privacy"] = request.form.get("privacy", ch["privacy"])
+    # Heures fixes saisies à la main (HH:MM séparées par virgule/espace). Vide = aléatoire.
+    fixed = parse_fixed_times(request.form.get("fixed_times", ""))
+    ch["fixed_times"] = ["%02d:%02d" % (h, m) for h, m in fixed]
     save_config()
     plan_day()  # les changements prennent effet immédiatement
-    flash("Réglages enregistrés.", "ok")
+    if ch["fixed_times"]:
+        flash("Réglages enregistrés — heures fixes : " + ", ".join(ch["fixed_times"]), "ok")
+    else:
+        flash("Réglages enregistrés — heures aléatoires dans la fenêtre.", "ok")
     return redirect(url_for("channel", name=name))
 
 

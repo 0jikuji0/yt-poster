@@ -275,6 +275,33 @@
         '<div style="display:grid;grid-template-columns:repeat(' + Math.max(1, channels.length) + ',1fr);gap:12px;">' + cards + "</div></section></div>";
   }
 
+  // panneau « meilleures heures de publication »
+  function bestHoursPanel(c) {
+    var hrs = c.hours, inner;
+    if (hrs == null) {
+      inner = '<div style="color:#777;font-size:13px;">Reconnecte la chaîne pour analyser les heures.</div>';
+    } else if (!hrs.length) {
+      inner = '<div style="color:#777;font-size:13px;">Pas encore assez de vidéos postées (avec vues) pour analyser. Publie à plusieurs heures différentes, puis reviens ici.</div>';
+    } else {
+      var max = Math.max.apply(null, hrs.map(function (h) { return h.avgPerDay; })) || 1;
+      var best = hrs.reduce(function (a, b) { return b.avgPerDay > a.avgPerDay ? b : a; });
+      var hh = function (h) { return (h < 10 ? "0" + h : "" + h) + "h"; };
+      var rows = hrs.slice().sort(function (a, b) { return b.avgPerDay - a.avgPerDay; }).map(function (h) {
+        var w = Math.max(2, Math.round(100 * h.avgPerDay / max));
+        var isBest = h.hour === best.hour;
+        return '<div style="display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:12px;margin:8px 0;font-family:\'IBM Plex Mono\';font-size:12px;">' +
+          '<span style="color:' + (isBest ? "#fff" : "#cfcfcf") + ';">' + hh(h.hour) + "</span>" +
+          '<span style="height:12px;background:#202020;border-radius:6px;overflow:hidden;display:block;"><span style="display:block;height:100%;width:' + w + '%;background:' + (isBest ? COL.chart : "rgba(255,77,141,0.32)") + ';border-radius:6px;"></span></span>' +
+          '<span style="color:#8a8a8a;white-space:nowrap;"><b style="color:#ededed;">' + h.avgPerDay + "</b> v/j · " + h.count + " vid.</span></div>";
+      }).join("");
+      inner = '<p style="margin:0 0 14px;color:#ededed;font-size:13px;">Meilleure heure : <b style="color:' + COL.chart + ';">' + hh(best.hour) + "</b> — " + best.avgPerDay + " vues/jour en moyenne (" + best.count + " vidéo" + (best.count > 1 ? "s" : "") + ").</p>" + rows;
+    }
+    return '<section style="' + S.panel + 'margin-bottom:18px;">' +
+      '<h2 style="' + S.h2 + '">Meilleures heures de publication</h2>' +
+      '<p style="margin:6px 0 16px;color:#8a8a8a;font-size:13px;">Vues / jour moyennes selon l\'heure de mise en ligne (corrigé de l\'âge des vidéos).</p>' +
+      inner + "</section>";
+  }
+
   // ---- page : chaîne ----
   function channelPage() {
     var c = channels[curIdx()];
@@ -334,6 +361,7 @@
         '<div style="border:1px solid #2c2c2c;border-radius:10px;overflow:hidden;margin-top:22px;">' +
           '<div style="display:grid;grid-template-columns:1.3fr 0.9fr 0.9fr 0.9fr;align-items:center;padding:11px 16px;background:#202020;font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#8a8a8a;font-weight:500;">' +
             "<span>Date</span><span>Vues / j</span><span>Abonnés Δ</span><span>Évol. vues</span></div>" + rows + "</div></section>" +
+      bestHoursPanel(c) +
       // compte + oauth
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;">' +
         '<section style="' + S.panel + '"><h2 style="' + S.h2 + '">Compte</h2>' +
@@ -361,6 +389,9 @@
             '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Confidentialité par défaut</span>' + privSel("privacy", c.settings.privacy) + "</div>" +
             '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Début (h)</span><input type="number" name="window_start" value="' + c.settings.start + '" class="foc" style="' + S.input + '"></div>' +
             '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Fin (h)</span><input type="number" name="window_end" value="' + c.settings.end + '" class="foc" style="' + S.input + '"></div></div>' +
+          '<div style="display:flex;flex-direction:column;gap:6px;margin-top:13px;"><span style="' + S.field + '">Heures fixes (optionnel)</span>' +
+            '<input type="text" name="fixed_times" value="' + esc((c.settings.fixedTimes || []).join(", ")) + '" placeholder="ex. 11:30, 14:00, 18:00 — vide = aléatoire" class="foc" style="' + S.input + '"></div>' +
+          '<div style="font-size:11.5px;color:#777;margin-top:8px;line-height:1.5;">Si renseigné, les vidéos partent à <b style="color:#9a9a9a;">ces heures précises</b> chaque jour (la fenêtre et « vidéos/jour » sont alors ignorés). Vide = horaires aléatoires dans la fenêtre.</div>' +
           '<div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#202020;border:1px solid #2c2c2c;">' +
             '<div style="' + S.field + '">Créneaux du jour</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;">' +
             (c.settings.active && c.slots.length ? c.slots.map(function (s) { return '<span style="font-family:\'IBM Plex Mono\';font-size:12px;background:#2c2c2c;color:#ededed;border-radius:6px;padding:5px 10px;">' + esc(s) + "</span>"; }).join("") : '<span style="font-size:13px;color:#777;">Aucun créneau — planification inactive ou déjà passés.</span>') + "</div></div>" +

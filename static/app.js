@@ -270,6 +270,7 @@
           '<h1 style="margin:0;font-size:27px;font-weight:700;letter-spacing:-0.015em;color:#f5f5f5;">' + esc(c.id) + "</h1>" + statusPill + "</div>" +
           '<div style="font-family:\'IBM Plex Mono\';font-size:12px;color:#8a8a8a;">Titre YouTube : ' + esc(c.ytTitle) + "</div></div>" +
         '<div style="display:flex;gap:8px;flex:none;">' +
+          '<form method="post" action="' + aPath + '/sync"><button class="hov-ghost" style="' + S.ghost + '">↻ Synchroniser</button></form>' +
           '<button data-rename="' + esc(c.id) + '" class="hov-ghost" style="' + S.ghost + '">Renommer la chaîne</button>' +
           '<a href="' + aPath + '/connect" class="hov-cta" style="border:1px solid #ff4d8d;background:#ff4d8d;color:#111;padding:9px 15px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;">Reconnecter</a></div></header>' +
       // performance panel

@@ -499,12 +499,41 @@ def logout():
     return redirect(url_for("login"))
 
 
+def record_snapshot(name: str, force: bool = False) -> bool:
+    """Enregistre (ou met à jour) le relevé du JOUR depuis l'API YouTube :
+    vues totales de la chaîne + abonnés. Ne fait rien si la chaîne n'est pas
+    connectée ou si l'API ne renvoie pas de stats. Retourne True si modifié."""
+    if not token_path(name).exists():
+        return False
+    stats = fetch_youtube_stats(name, force=force)
+    cstats = stats.get("channel")
+    if not cstats:
+        return False
+    today = datetime.now(TZ).date().isoformat()
+    views, subs = int(cstats["views"]), int(cstats["subs"])
+    lst = config["channels"][name].get("views", [])
+    existing = next((e for e in lst if e.get("date") == today), None)
+    if existing and existing.get("views") == views and existing.get("subs") == subs:
+        return False  # déjà à jour
+    lst = [e for e in lst if e.get("date") != today]
+    lst.append({"date": today, "views": views, "subs": subs})
+    lst.sort(key=lambda e: e["date"])
+    config["channels"][name]["views"] = lst
+    save_config()
+    return True
+
+
 def build_spa_data() -> list:
     """Données injectées dans la SPA (front « clipstudio ») : une entrée par chaîne
     avec relevés (vues + abonnés), réglages, créneaux du jour et statut."""
     now = datetime.now(TZ)
     chans = []
     for name, ch in config["channels"].items():
+        # Relevé auto du jour depuis YouTube (silencieux ; cache 10 min via l'API).
+        try:
+            record_snapshot(name)
+        except Exception as e:
+            log.warning("[%s] snapshot auto échoué : %s", name, e)
         folder = channel_folder(name)
         ensure_sidecars(name)
         state = load_state(folder / ".uploaded.json")
@@ -952,6 +981,26 @@ def add_views(name):
     config["channels"][name]["views"] = lst
     save_config()
     flash("Relevé enregistré.", "ok")
+    return redirect(back)
+
+
+@app.route("/channel/<name>/sync", methods=["POST"])
+@login_required
+def sync_views(name):
+    """Force la récupération des stats YouTube et enregistre le relevé du jour."""
+    if name not in config["channels"]:
+        abort(404)
+    back = url_for("channel", name=name)
+    if not token_path(name).exists():
+        flash("Chaîne non connectée — clique « Reconnecter » d'abord.", "error")
+        return redirect(back)
+    stats = fetch_youtube_stats(name, force=True)
+    if stats.get("error"):
+        flash(stats["error"], "error")
+        return redirect(back)
+    record_snapshot(name, force=True)
+    c = stats["channel"]
+    flash(f"Synchronisé ✓ {c['subs']} abonnés · {c['views']} vues (chaîne).", "ok")
     return redirect(back)
 
 

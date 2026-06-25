@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Heures de poste — clipstudio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 30px 38px 72px; }
+    .brandbar { display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px; border-bottom: 1px solid #1f1f1f; background: #0c0c0c; position: sticky; top: 0; z-index: 5; }
+    .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
+    .brand .logo { width: 28px; height: 28px; border-radius: 7px; background: #ff4d8d; display: flex; align-items: center; justify-content: center; }
+    .brand .logo span { width: 0; height: 0; border-left: 10px solid #0c0c0c; border-top: 6px solid transparent; border-bottom: 6px solid transparent; margin-left: 3px; }
+    .brand b { font-size: 15px; color: #fff; }
+    .brand small { font-family: 'IBM Plex Mono'; font-size: 10px; color: #7a7a7a; text-transform: uppercase; letter-spacing: .09em; display: block; }
+    .navlinks a { color: #8a8a8a; text-decoration: none; font-size: 13px; margin-left: 18px; }
+    .navlinks a:hover { color: #ededed; }
+    h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.015em; color: #f5f5f5; margin: 0; }
+    .sub { color: #8a8a8a; font-size: 13px; margin: 6px 0 0; }
+    .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .btn { border: 1px solid #3a3a3a; background: #1c1c1c; color: #ededed; padding: 9px 15px; border-radius: 8px;
+      font-size: 13px; font-weight: 500; cursor: pointer; text-decoration: none; }
+    .btn:hover { background: #262626; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 22px; }
+    .lib-tab { padding: 8px 14px; border-radius: 8px; text-decoration: none; font-family: 'IBM Plex Mono';
+      font-size: 12px; border: 1px solid #3a3a3a; background: #1c1c1c; color: #cfcfcf; }
+    .lib-tab:hover { border-color: #ff4d8d; }
+    .lib-tab.active { background: #ff4d8d; border-color: #ff4d8d; color: #111; font-weight: 600; }
+    .panel { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 22px 24px; }
+    .muted { color: #8a8a8a; font-size: 13px; }
+    /* cartes résumé */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 4px 0 22px; }
+    .card { background: #141414; border: 1px solid #262626; border-radius: 12px; padding: 14px 16px; }
+    .card .k { font-family: 'IBM Plex Mono'; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #6f6f6f; }
+    .card .v { font-size: 20px; font-weight: 700; color: #f3f3f3; margin-top: 5px; }
+    .card .v.good { color: #38d39f; } .card .v.bad { color: #ff4d6d; }
+    .card small { color: #8a8a8a; font-size: 11px; font-family: 'IBM Plex Mono'; }
+    /* histogramme par heure */
+    .chart { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end;
+      height: 200px; padding: 16px 16px 0; background: #0f0f0f; border: 1px solid #262626; border-radius: 12px; }
+    .bar { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+    .bar .fill { width: 100%; border-radius: 3px 3px 0 0; min-height: 2px; transition: opacity .15s; }
+    .bar .hlab { text-align: center; font-family: 'IBM Plex Mono'; font-size: 8px; color: #6f6f6f; margin-top: 5px; }
+    .bar.empty .fill { background: #232323; }
+    .bar:hover .fill { opacity: .8; }
+    .top .fill   { background: #38d39f; } .moyen .fill { background: #ffcf5c; }
+    .faible .fill{ background: #ff924d; } .nul .fill   { background: #ff4d6d; }
+    .xleg { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 2px 24px; font-family: 'IBM Plex Mono'; font-size: 11px; color: #9a9a9a; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+    /* tableau */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; font-family: 'IBM Plex Mono'; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+      color: #6f6f6f; padding: 10px 12px; border-bottom: 1px solid #2a2a2a; }
+    td { padding: 11px 12px; border-bottom: 1px solid #1d1d1d; color: #d8d8d8; }
+    td.num { font-family: 'IBM Plex Mono'; text-align: right; }
+    tr.dim td { color: #5e5e5e; }
+    .badge { font-family: 'IBM Plex Mono'; font-size: 10px; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
+    .b-top { background: rgba(56,211,159,.15); color: #38d39f; }
+    .b-moyen { background: rgba(255,207,92,.15); color: #ffcf5c; }
+    .b-faible { background: rgba(255,146,77,.15); color: #ff924d; }
+    .b-nul { background: rgba(255,77,109,.18); color: #ff6d85; }
+    .b-none { background: #1d1d1d; color: #6f6f6f; }
+    .pillrow { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 8px; }
+    .pill { font-family: 'IBM Plex Mono'; font-size: 12px; padding: 5px 11px; border-radius: 999px; border: 1px solid #3a3a3a; color: #cfcfcf; }
+    .pill.warn { border-color: #ff4d6d; color: #ff6d85; }
+    .note { font-size: 13px; color: #cfcfcf; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div id="flash">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, msg in messages %}<div class="flash {{ category }}">{{ msg }}</div>{% endfor %}
+    {% endwith %}
+  </div>
+
+  <div class="brandbar">
+    <a class="brand" href="{{ url_for('dashboard') }}">
+      <span class="logo"><span></span></span>
+      <span><b>clipstudio</b><small>auto-upload</small></span>
+    </a>
+    <div class="navlinks">
+      <a href="{{ url_for('dashboard') }}">Tableau de bord</a>
+      <a href="{{ url_for('library') }}">Bibliothèque</a>
+      <a href="{{ url_for('logs_page') }}">Logs</a>
+      <a href="{{ url_for('logout') }}">Déconnexion</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1>Heures de poste</h1>
+        <p class="sub">Performance des vidéos selon l'heure de mise en ligne — repère les heures à privilégier ou à bloquer.</p>
+      </div>
+      <a class="btn" href="{{ url_for('hours_page', channel=sel) if sel else url_for('hours_page') }}">↻ Rafraîchir</a>
+    </div>
+
+    <div class="tabs">
+      {% for n in names %}
+      <a class="lib-tab {% if sel == n %}active{% endif %}" href="{{ url_for('hours_page', channel=n) }}">{{ titles[n] or n }}</a>
+      {% endfor %}
+    </div>
+
+    {% if not analysis %}
+      <div class="panel"><p class="muted">Aucune chaîne configurée.</p></div>
+    {% elif analysis.error %}
+      <div class="panel"><p class="muted">{{ analysis.error }}</p></div>
+    {% elif analysis.n_posts == 0 %}
+      <div class="panel"><p class="muted">Aucune vidéo postée par cette chaîne pour l'instant — rien à analyser.
+        Les statistiques apparaîtront dès que des vidéos auront été publiées.</p></div>
+    {% else %}
+
+      <div class="cards">
+        <div class="card"><div class="k">Vidéos analysées</div><div class="v">{{ analysis.n_posts }}</div>
+          <small>{{ analysis.rows | selectattr('count') | list | length }} heure(s) utilisée(s)</small></div>
+        {% if analysis.best %}
+        <div class="card"><div class="k">Meilleure heure</div><div class="v good">{{ "%02d:00"|format(analysis.best.hour) }}</div>
+          <small>{{ analysis.best.avgPerDay }} vues/j · {{ analysis.best.count }} post(s)</small></div>
+        {% endif %}
+        <div class="card"><div class="k">Heures nulles</div><div class="v {{ 'bad' if analysis.null_hours else '' }}">{{ analysis.null_hours | length }}</div>
+          <small>postées mais ~0 vue</small></div>
+        <div class="card"><div class="k">Heures faibles</div><div class="v">{{ analysis.weak_hours | length }}</div>
+          <small>peu d'audience</small></div>
+      </div>
+
+      <div class="chart">
+        {% for r in analysis.rows %}
+          <div class="bar {{ r.verdict if r.count else 'empty' }}" title="{{ '%02d:00'|format(r.hour) }} · {{ r.count }} post(s) · {{ r.avgPerDay }} vues/j">
+            <div class="fill" style="height: {{ (r.ratio * 100) | round(0, 'floor') | int }}%;"></div>
+            <div class="hlab">{{ "%02d"|format(r.hour) }}</div>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="xleg">
+        <span><span class="dot" style="background:#38d39f"></span>Top</span>
+        <span><span class="dot" style="background:#ffcf5c"></span>Moyen</span>
+        <span><span class="dot" style="background:#ff924d"></span>Faible</span>
+        <span><span class="dot" style="background:#ff4d6d"></span>Nul (à bloquer)</span>
+        <span><span class="dot" style="background:#232323"></span>Jamais posté</span>
+      </div>
+
+      <div class="panel" style="margin-bottom:22px;">
+        <div class="k" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6f6f6f;">
+          Heures de poste actuelles ({{ analysis.mode }})</div>
+        <div class="pillrow">
+          {% for c in analysis.configured %}<span class="pill">{{ c }}</span>{% endfor %}
+        </div>
+        {% if analysis.null_hours %}
+        <p class="note" style="margin-top:16px;">
+          ⚠️ Heures à éviter / bloquer (postées mais sans audience) :
+          {% for r in analysis.null_hours %}<span class="pill warn">{{ "%02d:00"|format(r.hour) }}</span>{% endfor %}
+          <br><span class="muted">Retire-les de tes « heures fixes » dans les réglages de la chaîne.</span>
+        </p>
+        {% endif %}
+      </div>
+
+      <table>
+        <thead><tr>
+          <th>Heure</th><th>Verdict</th><th class="num">Vidéos</th>
+          <th class="num">Vues / jour (moy.)</th><th class="num">Vues totales</th>
+        </tr></thead>
+        <tbody>
+        {% for r in analysis.rows %}
+          <tr class="{{ '' if r.count else 'dim' }}">
+            <td>{{ "%02d:00"|format(r.hour) }}</td>
+            <td>
+              {% if not r.count %}<span class="badge b-none">—</span>
+              {% elif r.verdict == 'top' %}<span class="badge b-top">top</span>
+              {% elif r.verdict == 'moyen' %}<span class="badge b-moyen">moyen</span>
+              {% elif r.verdict == 'faible' %}<span class="badge b-faible">faible</span>
+              {% else %}<span class="badge b-nul">nul</span>{% endif %}
+            </td>
+            <td class="num">{{ r.count or '·' }}</td>
+            <td class="num">{{ r.avgPerDay if r.count else '·' }}</td>
+            <td class="num">{{ '{:,}'.format(r.totalViews).replace(',', ' ') if r.count else '·' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+
+      <p class="muted" style="margin-top:18px;">
+        Les vues sont normalisées en « vues / jour » (selon l'ancienneté de chaque vidéo) pour comparer
+        équitablement vidéos récentes et anciennes. Analyse basée sur l'heure de mise en ligne réelle.
+      </p>
+
+    {% endif %}
+  </div>
+
+  <script>
+    var fl = document.getElementById('flash');
+    if (fl && fl.children.length) setTimeout(function () { fl.style.transition = 'opacity .4s'; fl.style.opacity = '0'; }, 4000);
+  </script>
+</body>
+</html>

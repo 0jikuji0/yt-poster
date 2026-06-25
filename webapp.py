@@ -662,6 +662,76 @@ def compute_best_hours(name: str):
              "totalViews": b["views"]} for h, b in sorted(buckets.items())]
 
 
+def build_hours_analysis(name: str) -> dict:
+    """Analyse heure par heure (0-23) des performances de poste d'UNE chaîne :
+    pour chaque heure où des vidéos ont été postées, on a le nombre de posts, la
+    moyenne de vues/jour et le total de vues. On en déduit un verdict (top / moyen /
+    faible / nul) et on liste les « heures nulles » (postées mais ~0 vue) à éviter,
+    ainsi que les heures actuellement configurées pour poster (fixes ou fenêtre)."""
+    ch = config["channels"][name]
+    out = {
+        "name": name,
+        "title": ch.get("title"),
+        "connected": token_path(name).exists(),
+        "rows": [],          # 24 lignes (heures 0..23)
+        "configured": [],    # heures/fenêtre actuellement prévues pour poster
+        "mode": "",          # "fixe" | "aléatoire"
+        "best": None,        # meilleure heure utilisée
+        "null_hours": [],    # heures postées mais ~0 vue/jour
+        "weak_hours": [],    # heures faibles (peu de vues/jour)
+        "n_posts": 0,
+        "error": None,
+    }
+    if not out["connected"]:
+        out["error"] = "Chaîne non connectée — connecte-la pour analyser les heures de poste."
+        return out
+
+    hours = compute_best_hours(name)
+    if hours is None:
+        out["error"] = ("Stats indisponibles — reconnecte la chaîne (bouton « Connecter ») "
+                        "pour autoriser l'accès aux vues.")
+        return out
+
+    by_hour = {h["hour"]: h for h in hours}
+    maxvpd = max((h["avgPerDay"] for h in hours), default=0) or 1.0
+    rows = []
+    for h in range(24):
+        d = by_hour.get(h)
+        if not d:
+            rows.append({"hour": h, "count": 0, "avgPerDay": 0.0, "totalViews": 0,
+                         "ratio": 0.0, "verdict": "—"})
+            continue
+        vpd = d["avgPerDay"]
+        ratio = vpd / maxvpd
+        if vpd <= 0:
+            verdict = "nul"
+        elif ratio >= 0.66:
+            verdict = "top"
+        elif ratio >= 0.25:
+            verdict = "moyen"
+        else:
+            verdict = "faible"
+        rows.append({"hour": h, "count": d["count"], "avgPerDay": vpd,
+                     "totalViews": d["totalViews"], "ratio": ratio, "verdict": verdict})
+
+    used = [r for r in rows if r["count"] > 0]
+    out["rows"] = rows
+    out["n_posts"] = sum(r["count"] for r in used)
+    out["best"] = max(used, key=lambda r: r["avgPerDay"]) if used else None
+    out["null_hours"] = [r for r in used if r["avgPerDay"] <= 0]
+    out["weak_hours"] = [r for r in used if r["verdict"] == "faible"]
+
+    fixed = parse_fixed_times(ch.get("fixed_times", []))
+    if fixed and fixed_active_on(ch, datetime.now(TZ).date()):
+        out["mode"] = "fixe"
+        out["configured"] = ["%02d:%02d" % (h, m) for h, m in fixed]
+    else:
+        out["mode"] = "aléatoire"
+        out["configured"] = ["%02dh–%02dh" % (int(ch.get("window_start", 0)),
+                                              int(ch.get("window_end", 0)))]
+    return out
+
+
 def build_spa_data() -> list:
     """Données injectées dans la SPA (front « clipstudio ») : une entrée par chaîne
     avec stats par jour (Analytics), totaux, réglages, créneaux du jour et statut."""
@@ -762,6 +832,32 @@ def logs_page():
         lines = [ln for ln in lines if sel in ln]
     return render_template("logs.html", lines=lines[:300],
                            names=list(config["channels"]), sel=sel)
+
+
+@app.route("/hours")
+@login_required
+def hours_page():
+    """Analyse des heures de poste par chaîne : quelles heures rapportent des vues,
+    et lesquelles sont « nulles » (postées mais sans audience) → à bloquer."""
+    names = list(config["channels"])
+    sel = request.args.get("channel") or (names[0] if names else "")
+    if sel not in config["channels"]:
+        sel = names[0] if names else ""
+    analysis = build_hours_analysis(sel) if sel else None
+    titles = {n: config["channels"][n].get("title") for n in names}
+    return render_template("hours.html", names=names, sel=sel,
+                           analysis=analysis, titles=titles)
+
+
+@app.route("/aide/client-secret")
+@login_required
+def help_credentials():
+    """Documentation pas-à-pas pour créer le client_secret.json (OAuth « Application
+    Web ») requis par yt-poster, avec l'URI de redirection exacte à enregistrer."""
+    return render_template("help_credentials.html",
+                           base_url=config["base_url"].rstrip("/"),
+                           redirect=redirect_uri(),
+                           has_secrets=SECRETS_PATH.exists())
 
 
 def views_sparkline(views, w=600, h=140, pad=14):

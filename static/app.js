@@ -218,12 +218,14 @@
       '<div style="padding:2px 14px 8px;border-top:1px solid #1f1f1f;margin-top:6px;padding-top:12px;">' +
         '<a href="/library" class="hov-item" style="display:flex;align-items:center;gap:10px;border-radius:9px;padding:10px 12px;color:#ededed;text-decoration:none;font-size:13px;font-weight:500;">📚 Bibliothèque</a>' +
         '<a href="/logs" class="hov-item" style="display:flex;align-items:center;gap:10px;border-radius:9px;padding:10px 12px;margin-top:2px;color:#ededed;text-decoration:none;font-size:13px;font-weight:500;">🗒️ Logs</a>' +
+        '<a href="/hours" class="hov-item" style="display:flex;align-items:center;gap:10px;border-radius:9px;padding:10px 12px;margin-top:2px;color:#ededed;text-decoration:none;font-size:13px;font-weight:500;">🕒 Heures de poste</a>' +
       "</div>" +
       '<div style="margin-top:auto;padding:14px;border-top:1px solid #1f1f1f;">' +
         '<div style="font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.13em;color:#6f6f6f;text-transform:uppercase;padding:0 8px 8px;">Clés partagées</div>' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:9px;background:#171717;">' +
+        '<a href="/aide/client-secret" class="hov-item" style="display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:9px;background:#171717;text-decoration:none;">' +
           '<span style="font-family:\'IBM Plex Mono\';font-size:11px;color:#cfcfcf;">client_secret.json</span>' +
-          '<span style="font-size:10px;color:' + secretCol + ';font-family:\'IBM Plex Mono\';">' + secretTxt + "</span></div>" +
+          '<span style="font-size:10px;color:' + secretCol + ';font-family:\'IBM Plex Mono\';">' + secretTxt + "</span></a>" +
+        '<div style="margin-top:8px;padding:0 2px;"><a href="/aide/client-secret" class="hov-item" style="display:flex;align-items:center;gap:9px;border-radius:9px;padding:9px 10px;color:#ededed;text-decoration:none;font-size:12px;">❓ Comment créer ce fichier</a></div>' +
         '<div style="margin-top:12px;padding:0 8px;font-family:\'IBM Plex Mono\';font-size:11px;">' +
           '<a class="muted-link" href="/logout">Déconnexion</a></div></div>' +
       "</aside>";
@@ -371,6 +373,7 @@
             '<a href="' + aPath + '/connect" class="hov-ghost" style="' + S.ghost + 'text-decoration:none;">Reconnecter</a></div></section>' +
         '<section style="' + S.panel + '"><h2 style="' + S.h2 + '">Identifiants OAuth (clés)</h2>' +
           '<p style="margin:8px 0 0;color:#8a8a8a;font-size:13px;line-height:1.55;">Le fichier client_secret.json (« Application Web ») est partagé par toutes les chaînes. Dépose-le pour l\'installer ou le mettre à jour.</p>' +
+          '<a href="/aide/client-secret" class="hov-cta" style="display:inline-block;margin-top:12px;border:1px solid #ff4d8d;background:#ff4d8d;color:#111;padding:9px 15px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;">📄 Comment créer ce fichier ?</a>' +
           '<form method="post" action="/credentials/upload" enctype="multipart/form-data">' +
           '<label class="hov-drop" style="display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;cursor:pointer;border:1.5px dashed #3a3a3a;border-radius:10px;padding:18px;background:#202020;margin-top:14px;">' +
             '<span style="font-family:\'IBM Plex Mono\';font-size:13px;color:#ededed;">＋ Fichier client_secret.json</span>' +

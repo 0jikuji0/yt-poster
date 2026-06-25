@@ -410,6 +410,16 @@
           '<div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#202020;border:1px solid #2c2c2c;">' +
             '<div style="' + S.field + '">Créneaux du jour</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;">' +
             (c.settings.active && c.slots.length ? c.slots.map(function (s) { return '<span style="font-family:\'IBM Plex Mono\';font-size:12px;background:#2c2c2c;color:#ededed;border-radius:6px;padding:5px 10px;">' + esc(s) + "</span>"; }).join("") : '<span style="font-size:13px;color:#777;">Aucun créneau — planification inactive ou déjà passés.</span>') + "</div></div>" +
+          '<div style="margin-top:18px;padding-top:16px;border-top:1px solid #242424;">' +
+            '<div style="font-size:14px;font-weight:500;color:#ededed;">Hashtags automatiques</div>' +
+            '<p style="margin:5px 0 0;color:#8a8a8a;font-size:12.5px;line-height:1.5;">Appliqués aux vidéos déposées sans .json (y compris en SSH). Sans #, séparés par des virgules. #Shorts est ajouté tout seul.</p>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:13px;">' +
+              '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Toujours inclus</span>' +
+                '<input type="text" name="hashtags_core" value="' + esc((c.settings.hashtagsCore || []).join(", ")) + '" placeholder="ex. football, foot" class="foc" style="' + S.input + '"></div>' +
+              '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Nb piochés au hasard</span>' +
+                '<input type="number" name="hashtags_extra" value="' + (c.settings.hashtagsExtra != null ? c.settings.hashtagsExtra : 4) + '" min="0" max="15" class="foc" style="' + S.input + '"></div></div>' +
+            '<div style="display:flex;flex-direction:column;gap:6px;margin-top:13px;"><span style="' + S.field + '">Réservoir (piochés au hasard, un mélange différent par vidéo)</span>' +
+              '<textarea name="hashtags_pool" rows="2" placeholder="ex. viral, sport, but, skills, goal, ligue1…" class="foc" style="' + S.input + 'resize:vertical;font-family:\'IBM Plex Sans\';">' + esc((c.settings.hashtagsPool || []).join(", ")) + '</textarea></div></div>' +
           '<button class="hov-cta" style="' + S.cta + 'margin-top:16px;width:100%;padding:11px 16px;border-radius:9px;">Enregistrer les réglages</button></form></section>' +
         '<section style="' + S.panel + '"><h2 style="' + S.h2 + '">Déposer des vidéos</h2>' +
           '<p style="margin:8px 0 0;color:#8a8a8a;font-size:13px;line-height:1.55;">Mets des vidéos en file pour publication automatique.</p>' +

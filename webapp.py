@@ -112,6 +112,9 @@ def default_channel() -> dict:
         "privacy": "public",   # valeur par défaut pour les nouvelles vidéos
         "title": None,         # nom de la chaîne (rempli à la connexion OAuth)
         "views": [],           # relevés manuels de vues : [{"date": "...", "views": N}, ...]
+        "hashtags_core": [],   # hashtags toujours présents (sans #), ex. ["football", "foot"]
+        "hashtags_pool": [],   # réservoir piochés au hasard par vidéo (sans #)
+        "hashtags_extra": 4,   # combien piocher dans le réservoir pour chaque vidéo
     }
 
 
@@ -292,9 +295,45 @@ def fetch_youtube_stats(name: str, force: bool = False) -> dict:
     return data
 
 
+def parse_hashtags(text) -> list:
+    """Découpe une saisie « football, #foot ; viral » en ['football', 'foot', 'viral']
+    (sans #, sans doublon, ordre conservé). Accepte aussi une liste en entrée."""
+    if isinstance(text, list):
+        text = " ".join(text)
+    out, seen = [], set()
+    for tok in re.split(r"[\s,;]+", text or ""):
+        tok = tok.strip().lstrip("#")
+        if tok and tok.lower() not in seen:
+            seen.add(tok.lower())
+            out.append(tok)
+    return out
+
+
+def generate_hashtags(ch: dict):
+    """Construit (description, tags) à partir du réservoir de la chaîne : les hashtags
+    « toujours inclus » (core) + un tirage aléatoire dans le réservoir (pool).
+    Renvoie ('', []) si rien n'est configuré. La description porte les #, les tags non."""
+    core = parse_hashtags(ch.get("hashtags_core", []))
+    pool = parse_hashtags(ch.get("hashtags_pool", []))
+    try:
+        extra = max(0, int(ch.get("hashtags_extra", 0) or 0))
+    except (TypeError, ValueError):
+        extra = 0
+    # Évite les doublons entre core et pool.
+    pool = [h for h in pool if h.lower() not in {c.lower() for c in core}]
+    chosen = list(core)
+    if pool and extra > 0:
+        chosen += random.sample(pool, min(extra, len(pool)))
+    if not chosen:
+        return "", []
+    description = " ".join("#" + h for h in chosen)
+    return description, chosen
+
+
 def ensure_sidecars(name: str) -> int:
     """Crée un .json par défaut (titre = nom du fichier) pour toute vidéo du dossier
-    qui n'en a pas. Permet de déposer des vidéos en SSH sans préparer les métadonnées."""
+    qui n'en a pas. Permet de déposer des vidéos en SSH sans préparer les métadonnées.
+    Les hashtags configurés pour la chaîne sont injectés (description + tags)."""
     ch = config["channels"].get(name, {})
     folder = channel_folder(name)
     created = 0
@@ -303,10 +342,11 @@ def ensure_sidecars(name: str) -> int:
             continue
         sidecar = video.with_suffix(".json")
         if not sidecar.exists():
+            description, tags = generate_hashtags(ch)
             meta = {
                 "title": video.stem,
-                "description": "",
-                "tags": [],
+                "description": description,
+                "tags": tags,
                 "privacy": ch.get("privacy", "public"),
                 "made_for_kids": False,
             }
@@ -949,6 +989,9 @@ def build_spa_data() -> list:
                 "start": int(ch.get("window_start", 0)),
                 "end": int(ch.get("window_end", 0)),
                 "privacy": ch.get("privacy", "public"),
+                "hashtagsCore": ch.get("hashtags_core", []),
+                "hashtagsPool": ch.get("hashtags_pool", []),
+                "hashtagsExtra": int(ch.get("hashtags_extra", 4)),
                 "fixedTimes": ft,            # ["HH:MM", ...] ou []
                 "fixedUntil": fu,            # "YYYY-MM-DD" (temporaire) ou None (permanent)
                 "fixedDuration": fixed_dur,  # "permanent" | "1" | "2" | "3" | "7" | "14"
@@ -1082,6 +1125,14 @@ def channel_settings(name):
     ch["window_start"] = min(23, max(0, int(request.form.get("window_start", ch["window_start"]))))
     ch["window_end"] = min(24, max(0, int(request.form.get("window_end", ch["window_end"]))))
     ch["privacy"] = request.form.get("privacy", ch["privacy"])
+    # Réservoir de hashtags : « toujours inclus » + tirage aléatoire par vidéo.
+    ch["hashtags_core"] = parse_hashtags(request.form.get("hashtags_core", ""))
+    ch["hashtags_pool"] = parse_hashtags(request.form.get("hashtags_pool", ""))
+    try:
+        ch["hashtags_extra"] = max(0, min(15, int(request.form.get("hashtags_extra",
+                                                                    ch.get("hashtags_extra", 4)))))
+    except (TypeError, ValueError):
+        pass
     # Heures fixes saisies à la main (HH:MM séparées par virgule/espace). Vide = aléatoire.
     fixed = parse_fixed_times(request.form.get("fixed_times", ""))
     ch["fixed_times"] = ["%02d:%02d" % (h, m) for h, m in fixed]
@@ -1137,10 +1188,15 @@ def upload(name):
     description = request.form.get("description", "")
 
     def form_meta(title):
+        # Si l'utilisateur n'a saisi ni description ni tags, on retombe sur le
+        # réservoir de hashtags configuré pour la chaîne.
+        desc, tg = description, tags
+        if not desc.strip() and not tg:
+            desc, tg = generate_hashtags(config["channels"][name])
         return json.dumps({
             "title": base_title or title,
-            "description": description,
-            "tags": tags,
+            "description": desc,
+            "tags": tg,
             "privacy": privacy,
             "made_for_kids": made_for_kids,
         }, indent=2, ensure_ascii=False)

@@ -115,8 +115,14 @@
     {% elif analysis.error %}
       <div class="panel"><p class="muted">{{ analysis.error }}</p></div>
     {% elif analysis.n_posts == 0 %}
-      <div class="panel"><p class="muted">Aucune vidéo postée par cette chaîne pour l'instant — rien à analyser.
-        Les statistiques apparaîtront dès que des vidéos auront été publiées.</p></div>
+      <div class="panel"><p class="muted">
+        {% if analysis.n_recent_excluded %}{{ analysis.n_recent_excluded }} vidéo(s) postée(s) mais toutes trop récentes
+        (&lt; 7 jours) pour être jugées — l'API Analytics a ~2-3 j de décalage. Reviens dans quelques jours.
+        {% elif analysis.n_outside_window %}{{ analysis.n_outside_window }} vidéo(s) postée(s) uniquement hors de la
+        fenêtre de jour {{ "%02dh"|format(analysis.window[0]) }}–{{ "%02dh"|format(analysis.window[1]) }} — élargis la
+        fenêtre dans les réglages de la chaîne pour les analyser.
+        {% else %}Aucune vidéo postée par cette chaîne pour l'instant — rien à analyser.
+        Les statistiques apparaîtront dès que des vidéos auront été publiées.{% endif %}</p></div>
     {% else %}
       {% set analytics = analysis.method == 'analytics' %}
 
@@ -135,9 +141,13 @@
 
       {% if not analytics %}
       <div class="panel" style="margin-bottom:18px;border-left:3px solid #ffcf5c;">
-        <p class="muted" style="margin:0;">⚠️ L'API YouTube Analytics n'est pas disponible (non activée ou non autorisée) :
-        affichage de repli basé sur les <b>vues/jour</b>, sans distinction démarrage/après.
-        Active « YouTube Analytics API » et reconnecte la chaîne pour la métrique complète.</p>
+        <p class="muted" style="margin:0;">⚠️ Métrique démarrage/après indisponible — affichage de repli basé sur les
+        <b>vues/jour</b>. Causes possibles : « YouTube Analytics API » non activée dans le projet Google Cloud,
+        permission Analytics non accordée (reconnecte la chaîne), ou aucune vidéo assez ancienne.</p>
+        {% if analysis.api_error %}
+        <p style="margin:12px 0 0;font-family:'IBM Plex Mono';font-size:11px;color:#ff924d;word-break:break-word;">
+          Détail API : {{ analysis.api_error[:400] }}</p>
+        {% endif %}
       </div>
       {% endif %}
 

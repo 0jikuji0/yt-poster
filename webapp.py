@@ -667,40 +667,55 @@ def fetch_video_early_views(name: str, force: bool = False):
         _EARLY_CACHE[name] = (now, {})
         return {}
 
-    ids = list(uploads)[:500]  # le filtre Analytics « video== » accepte jusqu'à 500 IDs
-    start_date = min(uploads[v] for v in ids).date()
-    end_date = datetime.now(TZ).date()
-    out = None
+    today = datetime.now(TZ).date()
+    # On interroge UNE requête par vidéo : dimension « day » filtrée par « video==ID ».
+    # (Le combo dimensions=video,day n'est PAS un rapport Analytics valide → 400.)
+    # On borne à 90 jours après la mise en ligne : fenêtre comparable pour toutes les
+    # vidéos, et un Short ne bouge quasi plus passé ce délai.
     try:
         ya = build("youtubeAnalytics", "v2", credentials=creds, cache_discovery=False)
-        resp = ya.reports().query(
-            ids="channel==MINE", startDate=start_date.isoformat(),
-            endDate=end_date.isoformat(), metrics="views",
-            dimensions="video,day", filters="video==" + ",".join(ids),
-            maxResults=200000,
-        ).execute()
-        rows = resp.get("rows", []) or []
-        per = defaultdict(dict)  # video_id -> {jour 'YYYY-MM-DD' -> vues}
-        for r in rows:  # colonnes : [video, day, views]
-            per[r[0]][r[1]] = int(r[2])
-        out = {}
-        for vid, up in uploads.items():
-            days = per.get(vid, {})
-            total = sum(days.values())
-            d0 = up.date()
-            d1 = d0 + timedelta(days=1)
-            start = days.get(d0.isoformat(), 0) + days.get(d1.isoformat(), 0)
-            out[vid] = {"start": start, "total": total,
-                        "after": max(0, total - start), "upload": up}
-        _ANALYTICS_ERR.pop(name, None)
-    except HttpError as e:
-        _ANALYTICS_ERR[name] = str(e)
-        log.warning("[%s] vues par vidéo (Analytics) indisponibles : %s", name, e)
-        out = None
     except Exception as e:
         _ANALYTICS_ERR[name] = str(e)
-        log.warning("[%s] vues par vidéo erreur : %s", name, e)
-        out = None
+        _EARLY_CACHE[name] = (now, None)
+        return None
+
+    out = {}
+    for vid, up in list(uploads.items())[:300]:
+        d0 = up.date()
+        if d0 > today:
+            continue
+        end = min(today, d0 + timedelta(days=90))
+        try:
+            resp = ya.reports().query(
+                ids="channel==MINE", startDate=d0.isoformat(), endDate=end.isoformat(),
+                metrics="views", dimensions="day", filters="video==" + vid,
+            ).execute()
+        except HttpError as e:
+            low = str(e).lower()
+            # API non activée ou scope manquant → on abandonne (repli + vraie erreur affichée).
+            if (e.resp.status in (401, 403) or "has not been used" in low
+                    or "accessnotconfigured" in low or "service_disabled" in low
+                    or "is disabled" in low or "insufficient" in low):
+                _ANALYTICS_ERR[name] = str(e)
+                log.warning("[%s] vues par vidéo (Analytics) indisponibles : %s", name, e)
+                _EARLY_CACHE[name] = (now, None)
+                return None
+            # Erreur propre à cette vidéo (supprimée, sans données…) → on l'ignore.
+            log.info("[%s] vidéo %s ignorée (Analytics) : %s", name, vid, e)
+            continue
+        except Exception as e:
+            _ANALYTICS_ERR[name] = str(e)
+            log.warning("[%s] vues par vidéo erreur : %s", name, e)
+            _EARLY_CACHE[name] = (now, None)
+            return None
+
+        days = {r[0]: int(r[1]) for r in (resp.get("rows") or [])}  # 'YYYY-MM-DD' -> vues
+        total = sum(days.values())
+        start = days.get(d0.isoformat(), 0) + days.get((d0 + timedelta(days=1)).isoformat(), 0)
+        out[vid] = {"start": start, "total": total,
+                    "after": max(0, total - start), "upload": up}
+
+    _ANALYTICS_ERR.pop(name, None)
     _EARLY_CACHE[name] = (now, out)
     return out
 
@@ -859,6 +874,7 @@ def _hours_analysis_fallback(name, ch, ws, we, out):
     """Repli quand l'API Analytics est indisponible : on classe les heures sur les
     vues/jour (compute_best_hours), sans distinction démarrage/après."""
     out["method"] = "fallback"
+    out["api_error"] = _ANALYTICS_ERR.get(name)
     hours = compute_best_hours(name)
     if hours is None:
         out["error"] = ("Stats indisponibles — reconnecte la chaîne (bouton « Connecter ») "

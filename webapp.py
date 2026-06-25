@@ -632,9 +632,9 @@ def fetch_analytics_daily(name: str, force: bool = False):
 # qui creuse sur la durée. Cache mémoire (TTL) car l'API Analytics est lente/quotée.
 _EARLY_CACHE: dict = {}
 EARLY_TTL = 1800
-# Une vidéo n'est jugée que si elle est assez âgée : l'API Analytics a ~2-3 j de
-# décalage, et il faut quelques jours pour voir si les vues « continuent » après le pic.
-EARLY_MIN_AGE_DAYS = 7
+# Âge minimum (jours) pour qu'une vidéo soit jugée : l'API Analytics a ~2-3 j de
+# décalage, donc en dessous on n'a quasi pas de données. Réglable par l'UI (?days=N).
+EARLY_MIN_AGE_DAYS = 4
 
 
 def fetch_video_early_views(name: str, force: bool = False):
@@ -712,8 +712,13 @@ def fetch_video_early_views(name: str, force: bool = False):
         days = {r[0]: int(r[1]) for r in (resp.get("rows") or [])}  # 'YYYY-MM-DD' -> vues
         total = sum(days.values())
         start = days.get(d0.isoformat(), 0) + days.get((d0 + timedelta(days=1)).isoformat(), 0)
-        out[vid] = {"start": start, "total": total,
-                    "after": max(0, total - start), "upload": up}
+        after = max(0, total - start)
+        # « après » au prorata du temps écoulé (vues/jour passé le démarrage) : compare
+        # équitablement une vidéo de 5 jours et une de 60 jours.
+        after_days = (end - (d0 + timedelta(days=2))).days
+        after_rate = after / after_days if after_days > 0 else 0.0
+        out[vid] = {"start": start, "total": total, "after": after,
+                    "after_rate": after_rate, "upload": up}
 
     _ANALYTICS_ERR.pop(name, None)
     _EARLY_CACHE[name] = (now, out)
@@ -791,17 +796,18 @@ def _fill_configured(out, ch, ws, we):
         out["configured"] = ["%02dh–%02dh" % (ws, we)]
 
 
-def build_hours_analysis(name: str) -> dict:
+def build_hours_analysis(name: str, min_age_days: int = EARLY_MIN_AGE_DAYS) -> dict:
     """Analyse, heure par heure (dans la fenêtre de jour), la performance des vidéos
     selon leur heure de mise en ligne. Métrique « mélange » : on regarde à la fois le
-    DÉMARRAGE (vues des 2 premiers jours) et les vues APRÈS le démarrage —
+    DÉMARRAGE (vues des 2 premiers jours) et les vues APRÈS (au prorata du temps) —
       • bon démarrage + ça continue            → top
       • un seul des deux bon                    → moyen
       • les deux faibles                        → faible
       • posté mais ~0 vue                       → nul (à bloquer)
-    Les vidéos trop récentes (< EARLY_MIN_AGE_DAYS) sont écartées (pas encore jugeables).
+    Les vidéos de moins de `min_age_days` sont écartées (pas encore jugeables).
     Si l'API Analytics est indisponible, on retombe sur l'ancien calcul (vues/jour)."""
     ch, ws, we, out = _hours_base(name)
+    out["min_age"] = min_age_days
     if not out["connected"]:
         out["error"] = "Chaîne non connectée — connecte-la pour analyser les heures de poste."
         return out
@@ -813,26 +819,28 @@ def build_hours_analysis(name: str) -> dict:
         return out  # connectée mais rien posté
 
     now = datetime.now(TZ)
-    buckets = {}  # heure -> {start, after, total, n}
+    buckets = {}  # heure -> {start, after, rate, total, n}
     for d in early.values():
         up = d["upload"]
-        if (now - up).total_seconds() / 86400.0 < EARLY_MIN_AGE_DAYS:
+        if (now - up).total_seconds() / 86400.0 < min_age_days:
             out["n_recent_excluded"] += 1
             continue
         hour = up.hour
         if not (ws <= hour < we):
             out["n_outside_window"] += 1
             continue
-        b = buckets.setdefault(hour, {"start": 0, "after": 0, "total": 0, "n": 0})
+        b = buckets.setdefault(hour, {"start": 0, "after": 0, "rate": 0.0, "total": 0, "n": 0})
         b["start"] += d["start"]
         b["after"] += d["after"]
+        b["rate"] += d.get("after_rate", 0.0)
         b["total"] += d["total"]
         b["n"] += 1
 
     avg = {h: {"start": b["start"] / b["n"], "after": b["after"] / b["n"],
-               "total": b["total"] / b["n"], "n": b["n"]} for h, b in buckets.items()}
+               "rate": b["rate"] / b["n"], "total": b["total"] / b["n"], "n": b["n"]}
+           for h, b in buckets.items()}
     maxstart = max((v["start"] for v in avg.values()), default=0) or 1.0
-    maxafter = max((v["after"] for v in avg.values()), default=0) or 1.0
+    maxrate = max((v["rate"] for v in avg.values()), default=0) or 1.0
     maxtotal = max((v["total"] for v in avg.values()), default=0) or 1.0
 
     rows = []
@@ -843,7 +851,7 @@ def build_hours_analysis(name: str) -> dict:
                          "after": None, "total": 0, "startPct": 0, "afterPct": 0})
             continue
         good_start = (v["start"] / maxstart) >= 0.5
-        good_after = (v["after"] / maxafter) >= 0.5
+        good_after = (v["rate"] / maxrate) >= 0.5   # « après » jugé au prorata du temps
         if v["total"] <= 0:
             verdict = "nul"
         elif good_start and good_after:
@@ -1017,10 +1025,14 @@ def hours_page():
     sel = request.args.get("channel") or (names[0] if names else "")
     if sel not in config["channels"]:
         sel = names[0] if names else ""
-    analysis = build_hours_analysis(sel) if sel else None
+    try:
+        days = max(1, min(60, int(request.args.get("days", EARLY_MIN_AGE_DAYS))))
+    except (TypeError, ValueError):
+        days = EARLY_MIN_AGE_DAYS
+    analysis = build_hours_analysis(sel, min_age_days=days) if sel else None
     titles = {n: config["channels"][n].get("title") for n in names}
-    return render_template("hours.html", names=names, sel=sel,
-                           analysis=analysis, titles=titles)
+    return render_template("hours.html", names=names, sel=sel, analysis=analysis,
+                           titles=titles, days=days, age_presets=[1, 4, 7, 14, 30])
 
 
 @app.route("/aide/client-secret")

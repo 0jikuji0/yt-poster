@@ -101,14 +101,24 @@
         <h1>Heures de poste</h1>
         <p class="sub">Performance des vidéos selon l'heure de mise en ligne — repère les heures à privilégier ou à bloquer.</p>
       </div>
-      <a class="btn" href="{{ url_for('hours_page', channel=sel) if sel else url_for('hours_page') }}">↻ Rafraîchir</a>
+      <a class="btn" href="{{ url_for('hours_page', channel=sel, days=days) if sel else url_for('hours_page') }}">↻ Rafraîchir</a>
     </div>
 
     <div class="tabs">
       {% for n in names %}
-      <a class="lib-tab {% if sel == n %}active{% endif %}" href="{{ url_for('hours_page', channel=n) }}">{{ titles[n] or n }}</a>
+      <a class="lib-tab {% if sel == n %}active{% endif %}" href="{{ url_for('hours_page', channel=n, days=days) }}">{{ titles[n] or n }}</a>
       {% endfor %}
     </div>
+
+    {% if sel %}
+    <div class="tabs" style="margin-top:-8px;align-items:center;">
+      <span style="font-family:'IBM Plex Mono';font-size:11px;color:#6f6f6f;text-transform:uppercase;letter-spacing:.08em;margin-right:4px;">Âge mini des vidéos :</span>
+      {% for d in age_presets %}
+      <a class="lib-tab {% if days == d %}active{% endif %}" href="{{ url_for('hours_page', channel=sel, days=d) }}">≥ {{ d }}j</a>
+      {% endfor %}
+      <span class="muted" style="font-size:11px;">plus petit = plus d'heures, mais « après » moins fiable</span>
+    </div>
+    {% endif %}
 
     {% if not analysis %}
       <div class="panel"><p class="muted">Aucune chaîne configurée.</p></div>
@@ -117,7 +127,8 @@
     {% elif analysis.n_posts == 0 %}
       <div class="panel"><p class="muted">
         {% if analysis.n_recent_excluded %}{{ analysis.n_recent_excluded }} vidéo(s) postée(s) mais toutes trop récentes
-        (&lt; 7 jours) pour être jugées — l'API Analytics a ~2-3 j de décalage. Reviens dans quelques jours.
+        (&lt; {{ analysis.min_age }} jours) pour être jugées — l'API Analytics a ~2-3 j de décalage.
+        Baisse « l'âge mini » ci-dessus ou reviens dans quelques jours.
         {% elif analysis.n_outside_window %}{{ analysis.n_outside_window }} vidéo(s) postée(s) uniquement hors de la
         fenêtre de jour {{ "%02dh"|format(analysis.window[0]) }}–{{ "%02dh"|format(analysis.window[1]) }} — élargis la
         fenêtre dans les réglages de la chaîne pour les analyser.
@@ -187,7 +198,7 @@
         {% endif %}
         {% if analysis.n_recent_excluded or analysis.n_outside_window %}
         <p class="muted" style="margin-top:14px;font-size:12px;">
-          {% if analysis.n_recent_excluded %}{{ analysis.n_recent_excluded }} vidéo(s) trop récente(s) (&lt; 7 j) écartée(s) — pas encore jugeables.{% endif %}
+          {% if analysis.n_recent_excluded %}{{ analysis.n_recent_excluded }} vidéo(s) trop récente(s) (&lt; {{ analysis.min_age }} j) écartée(s) — pas encore jugeables.{% endif %}
           {% if analysis.n_outside_window %} {{ analysis.n_outside_window }} vidéo(s) postée(s) hors fenêtre de jour (masquée(s)).{% endif %}
         </p>
         {% endif %}
@@ -225,7 +236,8 @@
         {% if analytics %}
         Métrique « mélange » : on compare le <b>démarrage</b> (vues des 2 premiers jours) et les <b>vues ensuite</b>.
         Bon démarrage <b>et</b> suite = <b>top</b> ; un seul des deux = <b>moyen</b> ; les deux faibles = faible.
-        Seules les vidéos d'au moins 7 jours comptent (l'API Analytics a ~2-3 j de décalage).
+        « Après » est compté au prorata du temps (vues/jour passé le démarrage), pour comparer équitablement vidéos récentes et anciennes.
+        Seules les vidéos d'au moins {{ analysis.min_age }} jours comptent (l'API Analytics a ~2-3 j de décalage).
         Seule la fenêtre de jour {{ "%02dh"|format(analysis.window[0]) }}–{{ "%02dh"|format(analysis.window[1]) }} est analysée (réglable dans les réglages de la chaîne).
         {% else %}
         Affichage de repli : vues normalisées en vues/jour selon l'ancienneté. Active l'API YouTube Analytics

@@ -627,6 +627,84 @@ def fetch_analytics_daily(name: str, force: bool = False):
     return out
 
 
+# Vues par vidéo découpées en « démarrage » (jour de mise en ligne + lendemain) et
+# « après ». Sert à distinguer une vidéo qui démarre fort mais retombe d'une vidéo
+# qui creuse sur la durée. Cache mémoire (TTL) car l'API Analytics est lente/quotée.
+_EARLY_CACHE: dict = {}
+EARLY_TTL = 1800
+# Une vidéo n'est jugée que si elle est assez âgée : l'API Analytics a ~2-3 j de
+# décalage, et il faut quelques jours pour voir si les vues « continuent » après le pic.
+EARLY_MIN_AGE_DAYS = 7
+
+
+def fetch_video_early_views(name: str, force: bool = False):
+    """Pour chaque vidéo postée, récupère via YouTube Analytics les vues du DÉMARRAGE
+    (jour de mise en ligne + lendemain) et le TOTAL, d'où les vues « après le démarrage ».
+    Renvoie {video_id: {'start', 'total', 'after', 'upload': datetime}} ou None si
+    l'API Analytics est indisponible (le code retombe alors sur compute_best_hours)."""
+    now = datetime.now(TZ).timestamp()
+    c = _EARLY_CACHE.get(name)
+    if c and not force and now - c[0] < EARLY_TTL:
+        return c[1]
+    creds = get_credentials(name)
+    if not creds:
+        return None
+
+    state = load_state(channel_folder(name) / ".uploaded.json")
+    uploads = {}  # video_id -> datetime de mise en ligne (TZ)
+    for info in state.values():
+        vid, ts = info.get("video_id"), info.get("uploaded_at")
+        if not vid or not ts:
+            continue
+        try:
+            dt_ = datetime.fromisoformat(ts)
+        except ValueError:
+            continue
+        if dt_.tzinfo is None:
+            dt_ = dt_.replace(tzinfo=TZ)
+        uploads[vid] = dt_.astimezone(TZ)
+    if not uploads:
+        _EARLY_CACHE[name] = (now, {})
+        return {}
+
+    ids = list(uploads)[:500]  # le filtre Analytics « video== » accepte jusqu'à 500 IDs
+    start_date = min(uploads[v] for v in ids).date()
+    end_date = datetime.now(TZ).date()
+    out = None
+    try:
+        ya = build("youtubeAnalytics", "v2", credentials=creds, cache_discovery=False)
+        resp = ya.reports().query(
+            ids="channel==MINE", startDate=start_date.isoformat(),
+            endDate=end_date.isoformat(), metrics="views",
+            dimensions="video,day", filters="video==" + ",".join(ids),
+            maxResults=200000,
+        ).execute()
+        rows = resp.get("rows", []) or []
+        per = defaultdict(dict)  # video_id -> {jour 'YYYY-MM-DD' -> vues}
+        for r in rows:  # colonnes : [video, day, views]
+            per[r[0]][r[1]] = int(r[2])
+        out = {}
+        for vid, up in uploads.items():
+            days = per.get(vid, {})
+            total = sum(days.values())
+            d0 = up.date()
+            d1 = d0 + timedelta(days=1)
+            start = days.get(d0.isoformat(), 0) + days.get(d1.isoformat(), 0)
+            out[vid] = {"start": start, "total": total,
+                        "after": max(0, total - start), "upload": up}
+        _ANALYTICS_ERR.pop(name, None)
+    except HttpError as e:
+        _ANALYTICS_ERR[name] = str(e)
+        log.warning("[%s] vues par vidéo (Analytics) indisponibles : %s", name, e)
+        out = None
+    except Exception as e:
+        _ANALYTICS_ERR[name] = str(e)
+        log.warning("[%s] vues par vidéo erreur : %s", name, e)
+        out = None
+    _EARLY_CACHE[name] = (now, out)
+    return out
+
+
 def compute_best_hours(name: str):
     """Analyse « meilleures heures de publication » : croise l'heure de mise en ligne
     de chaque vidéo postée (uploaded_at) avec ses vues (API), normalisé par l'âge
@@ -662,73 +740,153 @@ def compute_best_hours(name: str):
              "totalViews": b["views"]} for h, b in sorted(buckets.items())]
 
 
-def build_hours_analysis(name: str) -> dict:
-    """Analyse heure par heure (0-23) des performances de poste d'UNE chaîne :
-    pour chaque heure où des vidéos ont été postées, on a le nombre de posts, la
-    moyenne de vues/jour et le total de vues. On en déduit un verdict (top / moyen /
-    faible / nul) et on liste les « heures nulles » (postées mais ~0 vue) à éviter,
-    ainsi que les heures actuellement configurées pour poster (fixes ou fenêtre)."""
+def _hours_base(name: str) -> dict:
+    """Squelette du dict d'analyse + fenêtre de jour (réglages de la chaîne)."""
     ch = config["channels"][name]
-    out = {
+    ws = int(ch.get("window_start", 0))
+    we = int(ch.get("window_end", 24))
+    if we <= ws:          # fenêtre incohérente → on analyse les 24h
+        ws, we = 0, 24
+    return ch, ws, we, {
         "name": name,
         "title": ch.get("title"),
         "connected": token_path(name).exists(),
-        "rows": [],          # 24 lignes (heures 0..23)
-        "configured": [],    # heures/fenêtre actuellement prévues pour poster
-        "mode": "",          # "fixe" | "aléatoire"
-        "best": None,        # meilleure heure utilisée
-        "null_hours": [],    # heures postées mais ~0 vue/jour
-        "weak_hours": [],    # heures faibles (peu de vues/jour)
-        "n_posts": 0,
+        "window": [ws, we],         # fenêtre de jour analysée (le reste est masqué)
+        "rows": [],                 # une ligne par heure DANS la fenêtre
+        "configured": [],           # heures/fenêtre actuellement prévues pour poster
+        "mode": "",                 # "fixe" | "aléatoire"
+        "method": "analytics",      # "analytics" (démarrage/après) | "fallback" (vues/jour)
+        "best": None,               # meilleure heure (plus de vues moy./vidéo)
+        "null_hours": [],           # heures postées mais ~0 vue
+        "weak_hours": [],           # heures faibles
+        "n_posts": 0,               # vidéos retenues dans l'analyse
+        "n_recent_excluded": 0,     # vidéos trop jeunes (< EARLY_MIN_AGE_DAYS) écartées
+        "n_outside_window": 0,      # vidéos postées hors fenêtre de jour
         "error": None,
     }
-    if not out["connected"]:
-        out["error"] = "Chaîne non connectée — connecte-la pour analyser les heures de poste."
-        return out
 
-    hours = compute_best_hours(name)
-    if hours is None:
-        out["error"] = ("Stats indisponibles — reconnecte la chaîne (bouton « Connecter ») "
-                        "pour autoriser l'accès aux vues.")
-        return out
 
-    by_hour = {h["hour"]: h for h in hours}
-    maxvpd = max((h["avgPerDay"] for h in hours), default=0) or 1.0
-    rows = []
-    for h in range(24):
-        d = by_hour.get(h)
-        if not d:
-            rows.append({"hour": h, "count": 0, "avgPerDay": 0.0, "totalViews": 0,
-                         "ratio": 0.0, "verdict": "—"})
-            continue
-        vpd = d["avgPerDay"]
-        ratio = vpd / maxvpd
-        if vpd <= 0:
-            verdict = "nul"
-        elif ratio >= 0.66:
-            verdict = "top"
-        elif ratio >= 0.25:
-            verdict = "moyen"
-        else:
-            verdict = "faible"
-        rows.append({"hour": h, "count": d["count"], "avgPerDay": vpd,
-                     "totalViews": d["totalViews"], "ratio": ratio, "verdict": verdict})
-
-    used = [r for r in rows if r["count"] > 0]
-    out["rows"] = rows
-    out["n_posts"] = sum(r["count"] for r in used)
-    out["best"] = max(used, key=lambda r: r["avgPerDay"]) if used else None
-    out["null_hours"] = [r for r in used if r["avgPerDay"] <= 0]
-    out["weak_hours"] = [r for r in used if r["verdict"] == "faible"]
-
+def _fill_configured(out, ch, ws, we):
     fixed = parse_fixed_times(ch.get("fixed_times", []))
     if fixed and fixed_active_on(ch, datetime.now(TZ).date()):
         out["mode"] = "fixe"
         out["configured"] = ["%02d:%02d" % (h, m) for h, m in fixed]
     else:
         out["mode"] = "aléatoire"
-        out["configured"] = ["%02dh–%02dh" % (int(ch.get("window_start", 0)),
-                                              int(ch.get("window_end", 0)))]
+        out["configured"] = ["%02dh–%02dh" % (ws, we)]
+
+
+def build_hours_analysis(name: str) -> dict:
+    """Analyse, heure par heure (dans la fenêtre de jour), la performance des vidéos
+    selon leur heure de mise en ligne. Métrique « mélange » : on regarde à la fois le
+    DÉMARRAGE (vues des 2 premiers jours) et les vues APRÈS le démarrage —
+      • bon démarrage + ça continue            → top
+      • un seul des deux bon                    → moyen
+      • les deux faibles                        → faible
+      • posté mais ~0 vue                       → nul (à bloquer)
+    Les vidéos trop récentes (< EARLY_MIN_AGE_DAYS) sont écartées (pas encore jugeables).
+    Si l'API Analytics est indisponible, on retombe sur l'ancien calcul (vues/jour)."""
+    ch, ws, we, out = _hours_base(name)
+    if not out["connected"]:
+        out["error"] = "Chaîne non connectée — connecte-la pour analyser les heures de poste."
+        return out
+
+    early = fetch_video_early_views(name)
+    if early is None:
+        return _hours_analysis_fallback(name, ch, ws, we, out)
+    if not early:
+        return out  # connectée mais rien posté
+
+    now = datetime.now(TZ)
+    buckets = {}  # heure -> {start, after, total, n}
+    for d in early.values():
+        up = d["upload"]
+        if (now - up).total_seconds() / 86400.0 < EARLY_MIN_AGE_DAYS:
+            out["n_recent_excluded"] += 1
+            continue
+        hour = up.hour
+        if not (ws <= hour < we):
+            out["n_outside_window"] += 1
+            continue
+        b = buckets.setdefault(hour, {"start": 0, "after": 0, "total": 0, "n": 0})
+        b["start"] += d["start"]
+        b["after"] += d["after"]
+        b["total"] += d["total"]
+        b["n"] += 1
+
+    avg = {h: {"start": b["start"] / b["n"], "after": b["after"] / b["n"],
+               "total": b["total"] / b["n"], "n": b["n"]} for h, b in buckets.items()}
+    maxstart = max((v["start"] for v in avg.values()), default=0) or 1.0
+    maxafter = max((v["after"] for v in avg.values()), default=0) or 1.0
+    maxtotal = max((v["total"] for v in avg.values()), default=0) or 1.0
+
+    rows = []
+    for h in range(ws, we):
+        v = avg.get(h)
+        if not v:
+            rows.append({"hour": h, "count": 0, "verdict": "—", "start": None,
+                         "after": None, "total": 0, "startPct": 0, "afterPct": 0})
+            continue
+        good_start = (v["start"] / maxstart) >= 0.5
+        good_after = (v["after"] / maxafter) >= 0.5
+        if v["total"] <= 0:
+            verdict = "nul"
+        elif good_start and good_after:
+            verdict = "top"
+        elif good_start or good_after:
+            verdict = "moyen"
+        else:
+            verdict = "faible"
+        rows.append({
+            "hour": h, "count": v["n"], "verdict": verdict,
+            "start": round(v["start"], 1), "after": round(v["after"], 1),
+            "total": round(v["total"], 1),
+            "startPct": round(v["start"] / maxtotal * 100),
+            "afterPct": round(v["after"] / maxtotal * 100),
+        })
+
+    used = [r for r in rows if r["count"] > 0]
+    out["rows"] = rows
+    out["n_posts"] = sum(r["count"] for r in used)
+    out["best"] = max(used, key=lambda r: r["total"]) if used else None
+    out["null_hours"] = [r for r in used if r["total"] <= 0]
+    out["weak_hours"] = [r for r in used if r["verdict"] == "faible"]
+    _fill_configured(out, ch, ws, we)
+    return out
+
+
+def _hours_analysis_fallback(name, ch, ws, we, out):
+    """Repli quand l'API Analytics est indisponible : on classe les heures sur les
+    vues/jour (compute_best_hours), sans distinction démarrage/après."""
+    out["method"] = "fallback"
+    hours = compute_best_hours(name)
+    if hours is None:
+        out["error"] = ("Stats indisponibles — reconnecte la chaîne (bouton « Connecter ») "
+                        "pour autoriser l'accès aux vues.")
+        return out
+    by_hour = {h["hour"]: h for h in hours}
+    maxvpd = max((h["avgPerDay"] for h in hours if ws <= h["hour"] < we), default=0) or 1.0
+    rows = []
+    for h in range(ws, we):
+        d = by_hour.get(h)
+        if not d:
+            rows.append({"hour": h, "count": 0, "verdict": "—", "start": None,
+                         "after": None, "total": 0, "startPct": 0, "afterPct": 0})
+            continue
+        vpd = d["avgPerDay"]
+        ratio = vpd / maxvpd
+        verdict = ("nul" if vpd <= 0 else "top" if ratio >= 0.66
+                   else "moyen" if ratio >= 0.25 else "faible")
+        rows.append({"hour": h, "count": d["count"], "verdict": verdict, "start": None,
+                     "after": None, "total": vpd, "startPct": 0,
+                     "afterPct": round(ratio * 100)})
+    used = [r for r in rows if r["count"] > 0]
+    out["rows"] = rows
+    out["n_posts"] = sum(r["count"] for r in used)
+    out["best"] = max(used, key=lambda r: r["total"]) if used else None
+    out["null_hours"] = [r for r in used if r["total"] <= 0]
+    out["weak_hours"] = [r for r in used if r["verdict"] == "faible"]
+    _fill_configured(out, ch, ws, we)
     return out
 
 
@@ -1259,6 +1417,7 @@ def sync_views(name):
         return redirect(back)
     totals = fetch_channel_totals(name, force=True)
     daily = fetch_analytics_daily(name, force=True)
+    fetch_video_early_views(name, force=True)  # rafraîchit l'analyse des heures de poste
     if totals is None:
         flash("Lecture impossible — reconnecte la chaîne pour autoriser l'accès aux stats.", "error")
         return redirect(back)

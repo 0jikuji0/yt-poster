@@ -39,16 +39,21 @@
     .card .v { font-size: 20px; font-weight: 700; color: #f3f3f3; margin-top: 5px; }
     .card .v.good { color: #38d39f; } .card .v.bad { color: #ff4d6d; }
     .card small { color: #8a8a8a; font-size: 11px; font-family: 'IBM Plex Mono'; }
-    /* histogramme par heure */
-    .chart { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end;
-      height: 200px; padding: 16px 16px 0; background: #0f0f0f; border: 1px solid #262626; border-radius: 12px; }
-    .bar { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
-    .bar .fill { width: 100%; border-radius: 3px 3px 0 0; min-height: 2px; transition: opacity .15s; }
-    .bar .hlab { text-align: center; font-family: 'IBM Plex Mono'; font-size: 8px; color: #6f6f6f; margin-top: 5px; }
-    .bar.empty .fill { background: #232323; }
-    .bar:hover .fill { opacity: .8; }
-    .top .fill   { background: #38d39f; } .moyen .fill { background: #ffcf5c; }
-    .faible .fill{ background: #ff924d; } .nul .fill   { background: #ff4d6d; }
+    /* histogramme par heure : barre empilée démarrage (bas) + après (haut) */
+    .chart { display: flex; gap: 4px; align-items: flex-end;
+      height: 210px; padding: 16px 16px 0; background: #0f0f0f; border: 1px solid #262626; border-radius: 12px; }
+    .bar { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+    .bar .seg { width: 100%; min-height: 0; transition: opacity .15s; }
+    .bar .seg.s { background: #b07dff; }                 /* démarrage */
+    .bar .seg.a { background: #38c7d3; border-radius: 3px 3px 0 0; }  /* après */
+    .bar .seg.s.only { border-radius: 3px 3px 0 0; }
+    .bar .hlab { text-align: center; font-family: 'IBM Plex Mono'; font-size: 9px; color: #6f6f6f; margin-top: 6px; }
+    .bar .vbadge { position: absolute; left: 0; right: 0; text-align: center; font-family: 'IBM Plex Mono';
+      font-size: 8px; font-weight: 600; bottom: 100%; margin-bottom: 3px; }
+    .bar.empty::before { content: ""; height: 2px; background: #232323; border-radius: 2px; }
+    .bar:hover .seg { opacity: .82; }
+    .v-top .vbadge { color: #38d39f; } .v-moyen .vbadge { color: #ffcf5c; }
+    .v-faible .vbadge { color: #ff924d; } .v-nul .vbadge { color: #ff6d85; }
     .xleg { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 2px 24px; font-family: 'IBM Plex Mono'; font-size: 11px; color: #9a9a9a; }
     .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
     /* tableau */
@@ -113,13 +118,14 @@
       <div class="panel"><p class="muted">Aucune vidéo postée par cette chaîne pour l'instant — rien à analyser.
         Les statistiques apparaîtront dès que des vidéos auront été publiées.</p></div>
     {% else %}
+      {% set analytics = analysis.method == 'analytics' %}
 
       <div class="cards">
         <div class="card"><div class="k">Vidéos analysées</div><div class="v">{{ analysis.n_posts }}</div>
-          <small>{{ analysis.rows | selectattr('count') | list | length }} heure(s) utilisée(s)</small></div>
+          <small>fenêtre {{ "%02dh"|format(analysis.window[0]) }}–{{ "%02dh"|format(analysis.window[1]) }}</small></div>
         {% if analysis.best %}
         <div class="card"><div class="k">Meilleure heure</div><div class="v good">{{ "%02d:00"|format(analysis.best.hour) }}</div>
-          <small>{{ analysis.best.avgPerDay }} vues/j · {{ analysis.best.count }} post(s)</small></div>
+          <small>{{ analysis.best.total }} vues moy./vidéo · {{ analysis.best.count }} post(s)</small></div>
         {% endif %}
         <div class="card"><div class="k">Heures nulles</div><div class="v {{ 'bad' if analysis.null_hours else '' }}">{{ analysis.null_hours | length }}</div>
           <small>postées mais ~0 vue</small></div>
@@ -127,20 +133,33 @@
           <small>peu d'audience</small></div>
       </div>
 
+      {% if not analytics %}
+      <div class="panel" style="margin-bottom:18px;border-left:3px solid #ffcf5c;">
+        <p class="muted" style="margin:0;">⚠️ L'API YouTube Analytics n'est pas disponible (non activée ou non autorisée) :
+        affichage de repli basé sur les <b>vues/jour</b>, sans distinction démarrage/après.
+        Active « YouTube Analytics API » et reconnecte la chaîne pour la métrique complète.</p>
+      </div>
+      {% endif %}
+
       <div class="chart">
         {% for r in analysis.rows %}
-          <div class="bar {{ r.verdict if r.count else 'empty' }}" title="{{ '%02d:00'|format(r.hour) }} · {{ r.count }} post(s) · {{ r.avgPerDay }} vues/j">
-            <div class="fill" style="height: {{ (r.ratio * 100) | round(0, 'floor') | int }}%;"></div>
+          <div class="bar {{ 'empty' if not r.count else 'v-' ~ r.verdict }}"
+               title="{{ '%02d:00'|format(r.hour) }} · {{ r.count }} post(s){% if analytics %} · démarrage {{ r.start }} / après {{ r.after }}{% else %} · {{ r.total }} vues/j{% endif %}">
+            {% if r.count %}<span class="vbadge">{{ r.total }}</span>{% endif %}
+            {% if r.afterPct %}<div class="seg a" style="height: {{ r.afterPct }}%;"></div>{% endif %}
+            {% if r.startPct %}<div class="seg s {{ 'only' if not r.afterPct }}" style="height: {{ r.startPct }}%;"></div>{% endif %}
             <div class="hlab">{{ "%02d"|format(r.hour) }}</div>
           </div>
         {% endfor %}
       </div>
       <div class="xleg">
-        <span><span class="dot" style="background:#38d39f"></span>Top</span>
-        <span><span class="dot" style="background:#ffcf5c"></span>Moyen</span>
-        <span><span class="dot" style="background:#ff924d"></span>Faible</span>
-        <span><span class="dot" style="background:#ff4d6d"></span>Nul (à bloquer)</span>
-        <span><span class="dot" style="background:#232323"></span>Jamais posté</span>
+        {% if analytics %}
+        <span><span class="dot" style="background:#b07dff"></span>Démarrage (2 premiers jours)</span>
+        <span><span class="dot" style="background:#38c7d3"></span>Vues ensuite</span>
+        <span style="color:#6f6f6f">— hauteur = vues moy./vidéo · couleur du chiffre = verdict</span>
+        {% else %}
+        <span><span class="dot" style="background:#38c7d3"></span>Vues / jour (moy.)</span>
+        {% endif %}
       </div>
 
       <div class="panel" style="margin-bottom:22px;">
@@ -156,12 +175,19 @@
           <br><span class="muted">Retire-les de tes « heures fixes » dans les réglages de la chaîne.</span>
         </p>
         {% endif %}
+        {% if analysis.n_recent_excluded or analysis.n_outside_window %}
+        <p class="muted" style="margin-top:14px;font-size:12px;">
+          {% if analysis.n_recent_excluded %}{{ analysis.n_recent_excluded }} vidéo(s) trop récente(s) (&lt; 7 j) écartée(s) — pas encore jugeables.{% endif %}
+          {% if analysis.n_outside_window %} {{ analysis.n_outside_window }} vidéo(s) postée(s) hors fenêtre de jour (masquée(s)).{% endif %}
+        </p>
+        {% endif %}
       </div>
 
       <table>
         <thead><tr>
           <th>Heure</th><th>Verdict</th><th class="num">Vidéos</th>
-          <th class="num">Vues / jour (moy.)</th><th class="num">Vues totales</th>
+          {% if analytics %}<th class="num">Démarrage (moy.)</th><th class="num">Après (moy.)</th>{% endif %}
+          <th class="num">{{ 'Total (moy.)' if analytics else 'Vues / jour (moy.)' }}</th>
         </tr></thead>
         <tbody>
         {% for r in analysis.rows %}
@@ -175,16 +201,26 @@
               {% else %}<span class="badge b-nul">nul</span>{% endif %}
             </td>
             <td class="num">{{ r.count or '·' }}</td>
-            <td class="num">{{ r.avgPerDay if r.count else '·' }}</td>
-            <td class="num">{{ '{:,}'.format(r.totalViews).replace(',', ' ') if r.count else '·' }}</td>
+            {% if analytics %}
+            <td class="num">{{ r.start if r.count else '·' }}</td>
+            <td class="num">{{ r.after if r.count else '·' }}</td>
+            {% endif %}
+            <td class="num">{{ r.total if r.count else '·' }}</td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
 
       <p class="muted" style="margin-top:18px;">
-        Les vues sont normalisées en « vues / jour » (selon l'ancienneté de chaque vidéo) pour comparer
-        équitablement vidéos récentes et anciennes. Analyse basée sur l'heure de mise en ligne réelle.
+        {% if analytics %}
+        Métrique « mélange » : on compare le <b>démarrage</b> (vues des 2 premiers jours) et les <b>vues ensuite</b>.
+        Bon démarrage <b>et</b> suite = <b>top</b> ; un seul des deux = <b>moyen</b> ; les deux faibles = faible.
+        Seules les vidéos d'au moins 7 jours comptent (l'API Analytics a ~2-3 j de décalage).
+        Seule la fenêtre de jour {{ "%02dh"|format(analysis.window[0]) }}–{{ "%02dh"|format(analysis.window[1]) }} est analysée (réglable dans les réglages de la chaîne).
+        {% else %}
+        Affichage de repli : vues normalisées en vues/jour selon l'ancienneté. Active l'API YouTube Analytics
+        pour la métrique démarrage/après.
+        {% endif %}
       </p>
 
     {% endif %}

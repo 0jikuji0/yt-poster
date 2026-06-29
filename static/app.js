@@ -8,6 +8,7 @@
   var DATA = window.__DATA__ || { channels: [], hasSecrets: false, initialView: "global" };
   var channels = DATA.channels;
   var COL = { chart: "#ff4d8d", subs: "#29d4c5", pos: "#2ecf76", neg2: "#ff5c61" };
+  var CHARTS = {}, chartSeq = 0;   // registre des courbes pour l'info-bulle au survol
 
   var view = DATA.initialView || "global";
   var range = 28;
@@ -35,9 +36,10 @@
     return m * pow;
   }
   function sortedChannels() {
-    return channels.slice().sort(function (a, b) {
-      return (b.settings.active ? 1 : 0) - (a.settings.active ? 1 : 0);
-    });
+    // Tri : chaînes connectées d'abord, puis celles dont le planificateur est actif,
+    // l'ordre d'insertion départageant les ex æquo (tri stable).
+    function score(c) { return (c.connected ? 2 : 0) + (c.settings.active ? 1 : 0); }
+    return channels.slice().sort(function (a, b) { return score(b) - score(a); });
   }
   var PRIV = [["public", "Publique"], ["unlisted", "Non répertoriée"], ["private", "Privée"]];
 
@@ -87,6 +89,43 @@
   function seriesChannel(c) { var d = c.daily || []; return mode === "cum" ? cumulative(d, c.totals) : d.slice(); }
   function seriesGlobal() { var d = globalDaily(); return mode === "cum" ? cumulative(d, globalTotals()) : d; }
   function sumRange(daily, key) { return filterRange(daily).reduce(function (a, b) { return a + b[key]; }, 0); }
+  // Série globale = somme des chaînes, en gardant le détail par chaîne (pour l'info-bulle).
+  function globalSeriesParts() {
+    var map = {};
+    channels.forEach(function (c) {
+      var title = (c.ytTitle && c.ytTitle !== "—") ? c.ytTitle : c.id;
+      seriesChannel(c).forEach(function (d) {
+        if (!map[d.date]) map[d.date] = { date: d.date, views: 0, subs: 0, parts: [] };
+        map[d.date].views += d.views; map[d.date].subs += d.subs;
+        map[d.date].parts.push({ title: title, views: d.views, subs: d.subs });
+      });
+    });
+    return Object.keys(map).sort().map(function (k) { return map[k]; });
+  }
+  // Format « 1 234 » (espace fine insécable comme séparateur de milliers).
+  function grp(v) { return v == null ? "—" : String(v).replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
+  function frDate(d) {
+    var M = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+    var p = String(d).split("-");
+    return p.length === 3 ? parseInt(p[2], 10) + " " + (M[parseInt(p[1], 10) - 1] || "") + " " + p[0] : d;
+  }
+  // Contenu HTML d'une info-bulle de point (jour + valeur exacte + détail par chaîne si dispo).
+  function tipHTML(p, key, unit) {
+    var head = '<div style="color:#9a9a9a;font-size:10px;letter-spacing:.05em;margin-bottom:3px;">' + frDate(p.date) + "</div>";
+    var main = '<div style="color:#ededed;font-size:14px;font-weight:600;">' + grp(p.val) + " " + unit + "</div>";
+    var extra = "";
+    if (p.parts && p.parts.length) {
+      var rows = p.parts.filter(function (x) { return x[key] > 0; })
+        .sort(function (a, b) { return b[key] - a[key]; })
+        .map(function (x) {
+          return '<div style="display:flex;justify-content:space-between;gap:14px;color:#c8c8c8;font-size:11px;margin-top:3px;">' +
+            '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">' + esc(x.title) + "</span>" +
+            '<span style="color:#ededed;">' + grp(x[key]) + "</span></div>";
+        }).join("");
+      if (rows) extra = '<div style="margin-top:7px;padding-top:6px;border-top:1px solid #333;">' + rows + "</div>";
+    }
+    return head + main + extra;
+  }
 
   function computeChart(series, key) {
     var n = series.length;
@@ -101,20 +140,24 @@
     var Y = function (v) { return round(padT + innerH * (1 - (v - lo) / (niceMax - lo))); };
     var showVals = n <= 8, rad = n <= 8 ? 4.5 : 3;
     var pts = series.map(function (s, i) {
-      return { cx: X(i), cy: Y(s[key]), ty: Y(s[key]) - 11, r: rad, label: showVals ? String(s[key]) : "" };
+      return { cx: X(i), cy: Y(s[key]), ty: Y(s[key]) - 11, r: rad, label: showVals ? String(s[key]) : "",
+        date: s.date, val: s[key], parts: s.parts || null };
     });
     var line = pts.map(function (p) { return p.cx + "," + p.cy; }).join(" ");
     var area = "M " + pts[0].cx + "," + baseY + " " + pts.map(function (p) { return "L " + p.cx + "," + p.cy; }).join(" ") + " L " + pts[n - 1].cx + "," + baseY + " Z";
     var ticks = [1, 0.5, 0].map(function (f) { var y = round(padT + innerH * (1 - f)); return { y: y, ty: y + 4, label: Math.round(lo + (niceMax - lo) * f) }; });
     var stepIdx = Math.max(1, Math.ceil(n / 6)), labels = [];
     series.forEach(function (s, i) { if (i % stepIdx === 0 || i === n - 1) labels.push({ x: X(i), label: shortD(s.date) }); });
-    return { ready: true, line: line, area: area, pts: pts, ticks: ticks, labels: labels };
+    return { ready: true, line: line, area: area, pts: pts, ticks: ticks, labels: labels,
+      top: padT, bottom: baseY, band: n > 1 ? innerW / (n - 1) : innerW };
   }
 
-  function chartSVG(cd, color) {
+  function chartSVG(cd, color, opts) {
     if (!cd.ready) {
       return '<div style="border:1px dashed #333333;border-radius:10px;height:160px;display:flex;align-items:center;justify-content:center;text-align:center;color:#777777;font-size:13px;background:repeating-linear-gradient(45deg,#161616,#161616 10px,#1a1a1a 10px,#1a1a1a 20px);">Pas assez de données sur cette période.</div>';
     }
+    opts = opts || {};
+    var key = opts.key || "views", unit = opts.unit || "";
     var fill = color + "2e";
     var ticks = cd.ticks.map(function (t) {
       return '<g><line x1="46" y1="' + t.y + '" x2="742" y2="' + t.y + '" stroke="#2a2a2a" stroke-width="1"></line><text x="38" y="' + t.ty + '" text-anchor="end" font-size="11" fill="#777777">' + t.label + "</text></g>";
@@ -126,10 +169,21 @@
     var labels = cd.labels.map(function (l) {
       return '<text x="' + l.x + '" y="212" text-anchor="middle" font-size="11" fill="#8a8a8a">' + l.label + "</text>";
     }).join("");
+    // Couche interactive : trait vertical + point surligné + zones de survol invisibles.
+    var id = "ch" + (++chartSeq), reg = { x: id + "-x", h: id + "-h", pts: [] };
+    var hot = cd.pts.map(function (p, i) {
+      reg.pts.push({ cx: p.cx, cy: p.cy, tip: tipHTML(p, key, unit) });
+      var w = cd.band, x = round(p.cx - w / 2);
+      return '<rect data-tip="' + id + '" data-i="' + i + '" x="' + x + '" y="' + cd.top + '" width="' + round(w) +
+        '" height="' + round(cd.bottom - cd.top) + '" fill="transparent" pointer-events="all" style="cursor:crosshair;"></rect>';
+    }).join("");
+    CHARTS[id] = reg;
+    var cross = '<line id="' + id + '-x" x1="0" y1="' + cd.top + '" x2="0" y2="' + cd.bottom + '" stroke="#5a5a5a" stroke-width="1" stroke-dasharray="3 3" pointer-events="none" style="display:none;"></line>';
+    var hl = '<circle id="' + id + '-h" r="5" fill="' + color + '" stroke="#fff" stroke-width="2" pointer-events="none" style="display:none;"></circle>';
     return '<svg viewBox="0 0 760 220" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;font-family:\'IBM Plex Mono\';animation:dpop .35s ease;">' +
       ticks + '<path d="' + cd.area + '" fill="' + fill + '" stroke="none"></path>' +
       '<polyline points="' + cd.line + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
-      pts + labels + "</svg>";
+      pts + labels + cross + hl + hot + "</svg>";
   }
 
   // styles partagés
@@ -234,7 +288,7 @@
   // ---- page : vue d'ensemble ----
   function globalPage() {
     var gt = globalTotals();
-    var series = filterRange(seriesGlobal());
+    var series = filterRange(globalSeriesParts());
     var gd = globalDaily();
     var cV = computeChart(series, "views"), cS = computeChart(series, "subs");
     var vg = sumRange(gd, "views"), sg = sumRange(gd, "subs");
@@ -269,8 +323,8 @@
           kpi("Abonnés gagnés · " + rangeLabel(), gainLabel(sg), gainColor(sg)) + "</div>" +
         avgLine(gt, gd) +
         '<div style="margin-top:22px;padding-top:20px;border-top:1px solid #262626;">' +
-          chartTitle(COL.chart, "Vues") + chartSVG(cV, COL.chart) +
-          '<div style="margin:22px 0 0;">' + chartTitle(COL.subs, "Abonnés") + chartSVG(cS, COL.subs) + "</div></div></section>" +
+          chartTitle(COL.chart, "Vues") + chartSVG(cV, COL.chart, { key: "views", unit: "vues" }) +
+          '<div style="margin:22px 0 0;">' + chartTitle(COL.subs, "Abonnés") + chartSVG(cS, COL.subs, { key: "subs", unit: "abonnés" }) + "</div></div></section>" +
       '<section style="' + S.panel + '">' +
         '<h2 style="' + S.h2 + '">Détail par chaîne</h2>' +
         '<p style="margin:4px 0 16px;color:#8a8a8a;font-size:13px;">Clique une chaîne pour ouvrir sa page de stats.</p>' +
@@ -358,8 +412,8 @@
           kpi("Vues gagnées · " + rangeLabel(), gainLabel(vg), gainColor(vg)) +
           kpi("Abonnés gagnés · " + rangeLabel(), gainLabel(sg), gainColor(sg)) + "</div>" +
         avgLine(c.totals, daily) +
-        '<div style="margin-top:22px;">' + chartTitle(COL.chart, "Vues") + chartSVG(cV, COL.chart) + "</div>" +
-        '<div style="margin:22px 0 0;">' + chartTitle(COL.subs, "Abonnés") + chartSVG(cS, COL.subs) + "</div>" +
+        '<div style="margin-top:22px;">' + chartTitle(COL.chart, "Vues") + chartSVG(cV, COL.chart, { key: "views", unit: "vues" }) + "</div>" +
+        '<div style="margin:22px 0 0;">' + chartTitle(COL.subs, "Abonnés") + chartSVG(cS, COL.subs, { key: "subs", unit: "abonnés" }) + "</div>" +
         '<div style="border:1px solid #2c2c2c;border-radius:10px;overflow:hidden;margin-top:22px;">' +
           '<div style="display:grid;grid-template-columns:1.3fr 0.9fr 0.9fr 0.9fr;align-items:center;padding:11px 16px;background:#202020;font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#8a8a8a;font-weight:500;">' +
             "<span>Date</span><span>Vues / j</span><span>Abonnés Δ</span><span>Évol. vues</span></div>" + rows + "</div></section>" +
@@ -447,6 +501,7 @@
   // ---- render + events ----
   var root = document.getElementById("root");
   function render() {
+    CHARTS = {}; chartSeq = 0; hideChartTip();
     var body = isGlobal() ? globalPage() : channelPage();
     root.innerHTML = '<div style="display:flex;min-height:100vh;width:100%;color:#ededed;background:#111;">' +
       sidebar() +
@@ -500,6 +555,38 @@
 
   var fl = document.getElementById("flash");
   if (fl && fl.children.length) setTimeout(function () { fl.style.transition = "opacity .4s"; fl.style.opacity = "0"; }, 4000);
+
+  // ---- info-bulle des courbes (survol) ----
+  var chartTip = document.createElement("div");
+  chartTip.style.cssText = "position:fixed;z-index:60;pointer-events:none;display:none;background:#161616;" +
+    "border:1px solid #3a3a3a;border-radius:9px;padding:8px 11px;box-shadow:0 6px 22px rgba(0,0,0,.5);" +
+    "font-family:'IBM Plex Mono';min-width:88px;";
+  document.body.appendChild(chartTip);
+  var hoverCross = null, hoverHl = null;
+  function hideChartTip() {
+    chartTip.style.display = "none";
+    if (hoverCross) hoverCross.style.display = "none";
+    if (hoverHl) hoverHl.style.display = "none";
+    hoverCross = hoverHl = null;
+  }
+  root.addEventListener("mousemove", function (e) {
+    var hit = e.target.closest ? e.target.closest("[data-tip]") : null;
+    if (!hit) { if (chartTip.style.display !== "none") hideChartTip(); return; }
+    var reg = CHARTS[hit.getAttribute("data-tip")];
+    var p = reg && reg.pts[+hit.getAttribute("data-i")];
+    if (!p) { hideChartTip(); return; }
+    var xl = document.getElementById(reg.x), hc = document.getElementById(reg.h);
+    if (xl) { xl.setAttribute("x1", p.cx); xl.setAttribute("x2", p.cx); xl.style.display = ""; if (hoverCross && hoverCross !== xl) hoverCross.style.display = "none"; hoverCross = xl; }
+    if (hc) { hc.setAttribute("cx", p.cx); hc.setAttribute("cy", p.cy); hc.style.display = ""; if (hoverHl && hoverHl !== hc) hoverHl.style.display = "none"; hoverHl = hc; }
+    chartTip.innerHTML = p.tip;
+    chartTip.style.display = "block";
+    var tw = chartTip.offsetWidth, th = chartTip.offsetHeight;
+    var lx = e.clientX + 14, ly = e.clientY + 14;
+    if (lx + tw > window.innerWidth - 8) lx = e.clientX - tw - 14;
+    if (ly + th > window.innerHeight - 8) ly = e.clientY - th - 14;
+    chartTip.style.left = lx + "px"; chartTip.style.top = ly + "px";
+  });
+  root.addEventListener("mouseleave", hideChartTip);
 
   render();
 })();

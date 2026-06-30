@@ -115,6 +115,8 @@ def default_channel() -> dict:
         "hashtags_core": [],   # hashtags toujours présents (sans #), ex. ["football", "foot"]
         "hashtags_pool": [],   # réservoir piochés au hasard par vidéo (sans #)
         "hashtags_extra": 4,   # combien piocher dans le réservoir pour chaque vidéo
+        "hashtags_temp": [],          # hashtags temporaires (sans #), ajoutés aux core
+        "hashtags_temp_remaining": 0, # nb de prochaines vidéos qui recevront les temporaires
     }
 
 
@@ -309,11 +311,14 @@ def parse_hashtags(text) -> list:
     return out
 
 
-def generate_hashtags(ch: dict):
+def generate_hashtags(ch: dict, extra_core=None):
     """Construit (description, tags) à partir du réservoir de la chaîne : les hashtags
     « toujours inclus » (core) + un tirage aléatoire dans le réservoir (pool).
+    `extra_core` (optionnel) ajoute des hashtags en tête (ex. jeu temporaire).
     Renvoie ('', []) si rien n'est configuré. La description porte les #, les tags non."""
-    core = parse_hashtags(ch.get("hashtags_core", []))
+    core = parse_hashtags(extra_core or []) + parse_hashtags(ch.get("hashtags_core", []))
+    # Dédoublonne les core entre eux (temp + permanents peuvent se chevaucher).
+    core = parse_hashtags(core)
     pool = parse_hashtags(ch.get("hashtags_pool", []))
     try:
         extra = max(0, int(ch.get("hashtags_extra", 0) or 0))
@@ -330,6 +335,27 @@ def generate_hashtags(ch: dict):
     return description, chosen
 
 
+def consume_hashtags(name: str):
+    """Construit (description, tags) pour UNE vidéo de la chaîne `name` et consomme
+    un crédit du jeu temporaire si une fenêtre est active. Décrémente le compteur et
+    sauvegarde ; nettoie le jeu temporaire une fois la fenêtre épuisée."""
+    ch = config["channels"][name]
+    temp = parse_hashtags(ch.get("hashtags_temp", []))
+    try:
+        remaining = int(ch.get("hashtags_temp_remaining", 0) or 0)
+    except (TypeError, ValueError):
+        remaining = 0
+    use_temp = bool(temp) and remaining > 0
+    description, tags = generate_hashtags(ch, extra_core=temp if use_temp else None)
+    if use_temp:
+        ch["hashtags_temp_remaining"] = remaining - 1
+        if ch["hashtags_temp_remaining"] <= 0:
+            ch["hashtags_temp_remaining"] = 0
+            ch["hashtags_temp"] = []   # fenêtre épuisée → retour aux permanents
+        save_config()
+    return description, tags
+
+
 def ensure_sidecars(name: str) -> int:
     """Crée un .json par défaut (titre = nom du fichier) pour toute vidéo du dossier
     qui n'en a pas. Permet de déposer des vidéos en SSH sans préparer les métadonnées.
@@ -342,7 +368,7 @@ def ensure_sidecars(name: str) -> int:
             continue
         sidecar = video.with_suffix(".json")
         if not sidecar.exists():
-            description, tags = generate_hashtags(ch)
+            description, tags = consume_hashtags(name)
             meta = {
                 "title": video.stem,
                 "description": description,
@@ -992,6 +1018,8 @@ def build_spa_data() -> list:
                 "hashtagsCore": ch.get("hashtags_core", []),
                 "hashtagsPool": ch.get("hashtags_pool", []),
                 "hashtagsExtra": int(ch.get("hashtags_extra", 4)),
+                "hashtagsTemp": ch.get("hashtags_temp", []),
+                "hashtagsTempRemaining": int(ch.get("hashtags_temp_remaining", 0) or 0),
                 "fixedTimes": ft,            # ["HH:MM", ...] ou []
                 "fixedUntil": fu,            # "YYYY-MM-DD" (temporaire) ou None (permanent)
                 "fixedDuration": fixed_dur,  # "permanent" | "1" | "2" | "3" | "7" | "14"
@@ -1133,6 +1161,14 @@ def channel_settings(name):
                                                                     ch.get("hashtags_extra", 4)))))
     except (TypeError, ValueError):
         pass
+    # Hashtags temporaires : ajoutés aux permanents pour les X prochaines vidéos.
+    # Enregistrer (ré)initialise la fenêtre au compteur saisi.
+    ch["hashtags_temp"] = parse_hashtags(request.form.get("hashtags_temp", ""))
+    try:
+        n = max(0, min(999, int(request.form.get("hashtags_temp_remaining", 0))))
+    except (TypeError, ValueError):
+        n = 0
+    ch["hashtags_temp_remaining"] = n if ch["hashtags_temp"] else 0
     # Heures fixes saisies à la main (HH:MM séparées par virgule/espace). Vide = aléatoire.
     fixed = parse_fixed_times(request.form.get("fixed_times", ""))
     ch["fixed_times"] = ["%02d:%02d" % (h, m) for h, m in fixed]
@@ -1192,7 +1228,7 @@ def upload(name):
         # réservoir de hashtags configuré pour la chaîne.
         desc, tg = description, tags
         if not desc.strip() and not tg:
-            desc, tg = generate_hashtags(config["channels"][name])
+            desc, tg = consume_hashtags(name)
         return json.dumps({
             "title": base_title or title,
             "description": desc,

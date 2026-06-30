@@ -473,7 +473,18 @@
               '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Nb piochés au hasard</span>' +
                 '<input type="number" name="hashtags_extra" value="' + (c.settings.hashtagsExtra != null ? c.settings.hashtagsExtra : 4) + '" min="0" max="15" class="foc" style="' + S.input + '"></div></div>' +
             '<div style="display:flex;flex-direction:column;gap:6px;margin-top:13px;"><span style="' + S.field + '">Réservoir (piochés au hasard, un mélange différent par vidéo)</span>' +
-              '<textarea name="hashtags_pool" rows="2" placeholder="ex. viral, sport, but, skills, goal, ligue1…" class="foc" style="' + S.input + 'resize:vertical;font-family:\'IBM Plex Sans\';">' + esc((c.settings.hashtagsPool || []).join(", ")) + '</textarea></div></div>' +
+              '<textarea name="hashtags_pool" rows="2" placeholder="ex. viral, sport, but, skills, goal, ligue1…" class="foc" style="' + S.input + 'resize:vertical;font-family:\'IBM Plex Sans\';">' + esc((c.settings.hashtagsPool || []).join(", ")) + '</textarea></div>' +
+            '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #242424;">' +
+              '<div style="font-size:13px;font-weight:500;color:#ededed;">Hashtags temporaires</div>' +
+              '<p style="margin:5px 0 0;color:#8a8a8a;font-size:12.5px;line-height:1.5;">Ajoutés aux permanents seulement pour les prochaines vidéos, puis retour automatique aux permanents. La décompte se fait au dépôt de chaque vidéo.</p>' +
+              (c.settings.hashtagsTempRemaining > 0
+                ? '<p style="margin:7px 0 0;color:#ff4d8d;font-size:12.5px;font-weight:500;">Actifs pour encore ' + c.settings.hashtagsTempRemaining + ' vidéo(s).</p>'
+                : '') +
+              '<div style="display:grid;grid-template-columns:1fr 200px;gap:13px;margin-top:13px;">' +
+                '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Hashtags temporaires</span>' +
+                  '<input type="text" name="hashtags_temp" value="' + esc((c.settings.hashtagsTemp || []).join(", ")) + '" placeholder="ex. coupedumonde, finale" class="foc" style="' + S.input + '"></div>' +
+                '<div style="display:flex;flex-direction:column;gap:6px;"><span style="' + S.field + '">Pour les X prochaines vidéos</span>' +
+                  '<input type="number" name="hashtags_temp_remaining" value="' + (c.settings.hashtagsTempRemaining != null ? c.settings.hashtagsTempRemaining : 0) + '" min="0" max="999" class="foc" style="' + S.input + '"></div></div></div></div></div>' +
           '<button class="hov-cta" style="' + S.cta + 'margin-top:16px;width:100%;padding:11px 16px;border-radius:9px;">Enregistrer les réglages</button></form></section>' +
         '<section style="' + S.panel + '"><h2 style="' + S.h2 + '">Déposer des vidéos</h2>' +
           '<p style="margin:8px 0 0;color:#8a8a8a;font-size:13px;line-height:1.55;">Mets des vidéos en file pour publication automatique.</p>' +

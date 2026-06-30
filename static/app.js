@@ -188,8 +188,9 @@
 
   // styles partagés
   var S = {
-    panel: "background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:22px 24px;box-shadow:0 1px 2px rgba(0,0,0,0.3);",
-    kpi: "border:1px solid #2c2c2c;background:#202020;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:7px;",
+    // « page continue » : sections séparées par un filet, sans encadré de carte.
+    panel: "border-top:1px solid #242424;padding:28px 0 4px;",
+    kpi: "display:flex;flex-direction:column;gap:7px;",
     kpiLabel: "font-family:'IBM Plex Mono';font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#8a8a8a;",
     kpiNum: "font-family:'IBM Plex Mono';font-size:27px;font-weight:600;line-height:1;",
     h2: "margin:0;font-size:15px;font-weight:700;letter-spacing:-0.01em;color:#f5f5f5;",
@@ -361,8 +362,8 @@
         avgLine(c.totals, daily) +
         '<div style="margin-top:22px;">' + chartTitle(COL.chart, "Vues") + chartSVG(cV, COL.chart, { key: "views", unit: "vues" }) + "</div>" +
         '<div style="margin:22px 0 0;">' + chartTitle(COL.subs, "Abonnés") + chartSVG(cS, COL.subs, { key: "subs", unit: "abonnés" }) + "</div>" +
-        '<div style="border:1px solid #2c2c2c;border-radius:10px;overflow:hidden;margin-top:22px;">' +
-          '<div style="display:grid;grid-template-columns:1.3fr 0.9fr 0.9fr 0.9fr;align-items:center;padding:11px 16px;background:#202020;font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#8a8a8a;font-weight:500;">' +
+        '<div style="margin-top:22px;">' +
+          '<div style="display:grid;grid-template-columns:1.3fr 0.9fr 0.9fr 0.9fr;align-items:center;padding:11px 16px;font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#8a8a8a;font-weight:500;">' +
             "<span>Date</span><span>Vues / j</span><span>Abonnés Δ</span><span>Évol. vues</span></div>" + rows + "</div></section>" +
       bestHoursPanel(c) +
       // compte + oauth
@@ -408,7 +409,7 @@
                   : "Heures fixes <b style=\"color:#9a9a9a;\">permanentes</b> (jusqu'à changement).")
               : "Heures <b style=\"color:#9a9a9a;\">aléatoires</b> dans la fenêtre. Renseigne des heures pour les fixer.") +
             " La fenêtre et « vidéos/jour » sont ignorés quand des heures fixes sont actives.</div>" +
-          '<div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#202020;border:1px solid #2c2c2c;">' +
+          '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #242424;">' +
             '<div style="' + S.field + '">Créneaux du jour</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;">' +
             (c.settings.active && c.slots.length ? c.slots.map(function (s) { return '<span style="font-family:\'IBM Plex Mono\';font-size:12px;background:#2c2c2c;color:#ededed;border-radius:6px;padding:5px 10px;">' + esc(s) + "</span>"; }).join("") : '<span style="font-size:13px;color:#777;">Aucun créneau — planification inactive ou déjà passés.</span>') + "</div></div>" +
           '<div style="margin-top:18px;padding-top:16px;border-top:1px solid #242424;">' +
@@ -451,7 +452,7 @@
                   '<button type="button" data-kids="no" id="kidsNo" style="border:none;cursor:pointer;padding:9px 18px;font-size:13px;font-weight:500;background:#ff4d8d;color:#111;">Non</button>' +
                   '<button type="button" data-kids="yes" id="kidsYes" style="border:none;border-left:1px solid #3a3a3a;cursor:pointer;padding:9px 18px;font-size:13px;font-weight:500;background:#1c1c1c;color:#ededed;">Oui</button></div>' +
                 '<input type="checkbox" name="made_for_kids" id="kidsInput" style="display:none;"></div></div></div>' +
-          '<div style="margin-top:16px;padding:13px 15px;border-radius:10px;background:#202020;border:1px solid #2c2c2c;font-size:12.5px;color:#9a9a9a;line-height:1.6;">' +
+          '<div style="margin-top:16px;padding:6px 0 0 14px;border-left:3px solid #2c2c2c;font-size:12.5px;color:#9a9a9a;line-height:1.6;">' +
             '<span style="font-weight:600;color:#ff4d8d;">Astuce —</span> dépose des paires <span style="font-family:\'IBM Plex Mono\';font-size:12px;color:#ededed;">clip01.mp4</span> + <span style="font-family:\'IBM Plex Mono\';font-size:12px;color:#ededed;">clip01.json</span> (même nom) pour donner à chaque vidéo son titre/description/tags. Les vidéos sans .json prennent les valeurs ci-dessus.</div>' +
           '<button class="hov-cta" style="' + S.cta + 'margin-top:16px;width:100%;padding:11px 16px;border-radius:9px;">Ajouter à la file</button></form></section></div></div>';
   }

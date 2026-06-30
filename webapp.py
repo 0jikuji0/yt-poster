@@ -597,6 +597,24 @@ def inject_nav():
     return {"nav_channels": _nav_channels(), "nav_has_secrets": SECRETS_PATH.exists()}
 
 
+def dated_url_for(endpoint, **values):
+    """Comme url_for, mais ajoute ?v=<mtime> aux fichiers statiques pour casser le
+    cache navigateur après un déploiement (app.css / app.js gardent le même nom)."""
+    if endpoint == "static" and values.get("filename"):
+        fpath = os.path.join(app.static_folder, values["filename"])
+        try:
+            values["v"] = int(os.stat(fpath).st_mtime)
+        except OSError:
+            pass
+    return url_for(endpoint, **values)
+
+
+@app.context_processor
+def override_url_for():
+    """Remplace url_for par dated_url_for dans tous les templates (cache-busting auto)."""
+    return {"url_for": dated_url_for}
+
+
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):

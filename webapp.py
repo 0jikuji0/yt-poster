@@ -577,6 +577,26 @@ if config["base_url"].startswith("https://"):
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
+def _nav_channels() -> list:
+    """Liste légère des chaînes pour la sidebar partagée (100 % local, sans appel API) :
+    nom, connectée (token présent), planificateur actif. Connectées d'abord."""
+    items = []
+    for name, ch in config["channels"].items():
+        items.append({
+            "id": name,
+            "connected": token_path(name).exists(),
+            "active": bool(ch.get("enabled")),
+        })
+    items.sort(key=lambda c: (c["connected"], c["active"]), reverse=True)
+    return items
+
+
+@app.context_processor
+def inject_nav():
+    """Rend la sidebar disponible dans tous les templates sans toucher aux render_template."""
+    return {"nav_channels": _nav_channels(), "nav_has_secrets": SECRETS_PATH.exists()}
+
+
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):

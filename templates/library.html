@@ -1,24 +1,8 @@
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Bibliothèque — clipstudio</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+{% extends "_shell.html" %}
+{% block title %}Bibliothèque — clipstudio{% endblock %}
+
+{% block styles %}
   <style>
-    .wrap { max-width: 1080px; margin: 0 auto; padding: 30px 38px 72px; }
-    .brandbar { display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 24px; border-bottom: 1px solid #1f1f1f; background: #0c0c0c; position: sticky; top: 0; z-index: 5; }
-    .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
-    .brand .logo { width: 28px; height: 28px; border-radius: 7px; background: #ff4d8d; display: flex; align-items: center; justify-content: center; }
-    .brand .logo span { width: 0; height: 0; border-left: 10px solid #0c0c0c; border-top: 6px solid transparent; border-bottom: 6px solid transparent; margin-left: 3px; }
-    .brand b { font-size: 15px; color: #fff; }
-    .brand small { font-family: 'IBM Plex Mono'; font-size: 10px; color: #7a7a7a; text-transform: uppercase; letter-spacing: .09em; display: block; }
-    .navlinks a { color: #8a8a8a; text-decoration: none; font-size: 13px; margin-left: 18px; }
-    .navlinks a:hover { color: #ededed; }
     h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.015em; color: #f5f5f5; margin: 0; }
     .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 22px; }
     .lib-tab { padding: 8px 14px; border-radius: 8px; text-decoration: none; font-family: 'IBM Plex Mono';
@@ -28,18 +12,19 @@
     .lib-tab .count { display: inline-block; min-width: 18px; text-align: center; margin-left: 6px; padding: 0 6px;
       border-radius: 20px; background: rgba(255,255,255,.15); font-size: 11px; }
     .lib-tab.active .count { background: rgba(0,0,0,.18); }
+    /* Zone de dépôt : on garde le tireté (affordance « déposer ici »). */
     #dropzone { display: block; text-align: center; padding: 28px; margin: 0 0 24px; cursor: pointer;
-      border: 1.5px dashed #3a3a3a; border-radius: 12px; color: #8a8a8a; background: #202020; }
+      border: 1.5px dashed #3a3a3a; border-radius: 12px; color: #8a8a8a; background: #181818; }
     #dropzone strong { color: #ededed; }
     #dropzone.over { border-color: #ff4d8d; background: #242424; }
     #dropzone code { font-family: 'IBM Plex Mono'; font-size: 12px; color: #ededed; background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-    .gallery { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-    .clip { background: #202020; border: 1px solid #2c2c2c; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
-    .clip video { width: 100%; aspect-ratio: 9/16; object-fit: cover; background: #000; display: block; }
-    .clip-meta { padding: 10px 12px; flex: 1; }
+    .gallery { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+    .clip { display: flex; flex-direction: column; }
+    .clip video { width: 100%; aspect-ratio: 9/16; object-fit: cover; background: #000; display: block; border-radius: 10px; }
+    .clip-meta { padding: 9px 2px 4px; }
     .clip-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .clip-sub { font-family: 'IBM Plex Mono'; font-size: 11px; color: #8a8a8a; }
-    .clip-del { margin: 0 12px 12px; border: 1px solid #3a3a3a; background: #1c1c1c; color: #ff8c8f;
+    .clip-del { margin: 8px 0 0; border: 1px solid #3a3a3a; background: #1c1c1c; color: #ff8c8f;
       padding: 7px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
     .clip-del:hover { background: #2a1c1f; border-color: #ff5c61; }
     .head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -47,28 +32,10 @@
     .head .meta b { color: #ededed; }
     .muted { color: #8a8a8a; font-size: 13px; }
   </style>
-</head>
-<body>
-  <div id="flash">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for category, msg in messages %}<div class="flash {{ category }}">{{ msg }}</div>{% endfor %}
-    {% endwith %}
-  </div>
+{% endblock %}
 
-  <div class="brandbar">
-    <a class="brand" href="{{ url_for('dashboard') }}">
-      <span class="logo"><span></span></span>
-      <span><b>clipstudio</b><small>auto-upload</small></span>
-    </a>
-    <div class="navlinks">
-      <a href="{{ url_for('dashboard') }}">Tableau de bord</a>
-      <a href="{{ url_for('logs_page') }}">Logs</a>
-      <a href="{{ url_for('hours_page') }}">Heures de poste</a>
-      <a href="{{ url_for('logout') }}">Déconnexion</a>
-    </div>
-  </div>
-
-  <div class="wrap">
+{% block main %}
+  <div class="page">
     <div class="head">
       <h1>Bibliothèque</h1>
       <div class="meta"><b>{{ total }}</b> clip(s) en attente{% if total_mb %} · <b>{{ total_mb }}</b> Mo{% endif %}</div>
@@ -117,7 +84,9 @@
     <p class="muted">Aucune chaîne.</p>
     {% endif %}
   </div>
+{% endblock %}
 
+{% block scripts %}
   <script>
     var form = document.getElementById('dropform');
     if (form) {
@@ -134,8 +103,5 @@
         if (ev.dataTransfer.files.length) { input.files = ev.dataTransfer.files; form.submit(); }
       });
     }
-    var fl = document.getElementById('flash');
-    if (fl && fl.children.length) setTimeout(function () { fl.style.transition = 'opacity .4s'; fl.style.opacity = '0'; }, 4000);
   </script>
-</body>
-</html>
+{% endblock %}

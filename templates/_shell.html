@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}clipstudio — auto-upload{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  {% block styles %}{% endblock %}
+</head>
+<body>
+  <div id="flash">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, msg in messages %}
+        <div class="flash {{ category }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+  </div>
+  <div class="shell">
+    {% include "_sidebar.html" %}
+    <main class="main-content">{% block main %}{% endblock %}</main>
+  </div>
+  <script>
+    // Toasts : disparition douce après 4 s.
+    (function () {
+      var fl = document.getElementById("flash");
+      if (fl && fl.children.length) setTimeout(function () {
+        fl.style.transition = "opacity .4s"; fl.style.opacity = "0";
+      }, 4000);
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

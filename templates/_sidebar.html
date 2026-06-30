@@ -1,0 +1,54 @@
+{# Sidebar partagée par toutes les pages authentifiées (source unique).
+   Alimentée par le context_processor inject_nav (nav_channels, nav_has_secrets).
+   État actif déduit de request.endpoint / request.view_args. #}
+<aside class="sidebar">
+  <div class="sb-head">
+    <div class="sb-logo"><i></i></div>
+    <div class="sb-brand"><b>clipstudio</b><span>auto-upload</span></div>
+  </div>
+
+  <div class="sb-block">
+    <a class="sb-item hov-item {{ 'on' if request.endpoint == 'dashboard' else '' }}" href="{{ url_for('dashboard') }}">
+      <span class="ind"></span>
+      <span class="sb-dot {{ 'connected' if request.endpoint == 'dashboard' else '' }}"></span>
+      <span>Vue d'ensemble</span>
+    </a>
+  </div>
+
+  <div class="sb-block">
+    <div class="sb-sec">Chaînes · {{ nav_channels|length }}</div>
+    {% for c in nav_channels %}
+      {% set active = request.endpoint == 'channel' and request.view_args and request.view_args.get('name') == c.id %}
+      <a class="sb-item hov-item {{ 'on' if active else '' }}" href="{{ url_for('channel', name=c.id) }}">
+        <span class="ind"></span>
+        <span class="sb-dot {{ 'connected' if c.connected else '' }}"></span>
+        <span class="sb-name">{{ c.id }}</span>
+      </a>
+    {% endfor %}
+    <form class="sb-add" method="post" action="{{ url_for('add_channel') }}">
+      <input name="name" placeholder="+ ajouter" class="foc">
+      <button class="hov-ghost">OK</button>
+    </form>
+  </div>
+
+  <div class="sb-block tp">
+    <a class="sb-item hov-item {{ 'on' if request.endpoint == 'library' else '' }}" href="{{ url_for('library') }}">📚 <span>Bibliothèque</span></a>
+    <a class="sb-item hov-item {{ 'on' if request.endpoint == 'logs_page' else '' }}" href="{{ url_for('logs_page') }}">🗒️ <span>Logs</span></a>
+    <a class="sb-item hov-item {{ 'on' if request.endpoint == 'hours_page' else '' }}" href="{{ url_for('hours_page') }}">🕒 <span>Heures de poste</span></a>
+    <a class="sb-item hov-item {{ 'on' if request.endpoint == 'stats' else '' }}" href="{{ url_for('stats') }}">📊 <span>Statistiques</span></a>
+  </div>
+
+  <div class="sb-foot">
+    <div class="sb-sec">Clés partagées</div>
+    <a class="sb-secret hov-item" href="{{ url_for('help_credentials') }}">
+      <b>client_secret.json</b>
+      <span style="color: {{ '#2ecf76' if nav_has_secrets else '#8a8a8a' }};">{{ 'installé' if nav_has_secrets else 'à installer' }}</span>
+    </a>
+    <div style="margin-top:8px;padding:0 2px;">
+      <a class="sb-item hov-item" style="font-size:12px;" href="{{ url_for('help_credentials') }}">❓ <span>Comment créer ce fichier</span></a>
+    </div>
+    <div style="margin-top:12px;padding:0 8px;font-family:'IBM Plex Mono';font-size:11px;">
+      <a class="muted-link" href="{{ url_for('logout') }}">Déconnexion</a>
+    </div>
+  </div>
+</aside>

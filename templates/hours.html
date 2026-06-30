@@ -1,24 +1,8 @@
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Heures de poste — clipstudio</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+{% extends "_shell.html" %}
+{% block title %}Heures de poste — clipstudio{% endblock %}
+
+{% block styles %}
   <style>
-    .wrap { max-width: 1080px; margin: 0 auto; padding: 30px 38px 72px; }
-    .brandbar { display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 24px; border-bottom: 1px solid #1f1f1f; background: #0c0c0c; position: sticky; top: 0; z-index: 5; }
-    .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
-    .brand .logo { width: 28px; height: 28px; border-radius: 7px; background: #ff4d8d; display: flex; align-items: center; justify-content: center; }
-    .brand .logo span { width: 0; height: 0; border-left: 10px solid #0c0c0c; border-top: 6px solid transparent; border-bottom: 6px solid transparent; margin-left: 3px; }
-    .brand b { font-size: 15px; color: #fff; }
-    .brand small { font-family: 'IBM Plex Mono'; font-size: 10px; color: #7a7a7a; text-transform: uppercase; letter-spacing: .09em; display: block; }
-    .navlinks a { color: #8a8a8a; text-decoration: none; font-size: 13px; margin-left: 18px; }
-    .navlinks a:hover { color: #ededed; }
     h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.015em; color: #f5f5f5; margin: 0; }
     .sub { color: #8a8a8a; font-size: 13px; margin: 6px 0 0; }
     .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -30,18 +14,18 @@
       font-size: 12px; border: 1px solid #3a3a3a; background: #1c1c1c; color: #cfcfcf; }
     .lib-tab:hover { border-color: #ff4d8d; }
     .lib-tab.active { background: #ff4d8d; border-color: #ff4d8d; color: #111; font-weight: 600; }
-    .panel { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 22px 24px; }
     .muted { color: #8a8a8a; font-size: 13px; }
-    /* cartes résumé */
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 4px 0 22px; }
-    .card { background: #141414; border: 1px solid #262626; border-radius: 12px; padding: 14px 16px; }
+    /* Bloc message / section : continu, séparé par un filet. */
+    .block { padding: 22px 0; border-top: 1px solid #242424; }
+    .block.first { border-top: none; padding-top: 6px; }
+    /* cartes résumé — continues (sans encadré), séparées par la grille */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 22px; margin: 6px 0 24px; }
     .card .k { font-family: 'IBM Plex Mono'; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #6f6f6f; }
     .card .v { font-size: 20px; font-weight: 700; color: #f3f3f3; margin-top: 5px; }
     .card .v.good { color: #38d39f; } .card .v.bad { color: #ff4d6d; }
     .card small { color: #8a8a8a; font-size: 11px; font-family: 'IBM Plex Mono'; }
     /* histogramme par heure : barre empilée démarrage (bas) + après (haut) */
-    .chart { display: flex; gap: 4px; align-items: flex-end;
-      height: 210px; padding: 16px 16px 0; background: #0f0f0f; border: 1px solid #262626; border-radius: 12px; }
+    .chart { display: flex; gap: 4px; align-items: flex-end; height: 210px; padding: 16px 2px 0; }
     .bar { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
     .bar .seg { width: 100%; min-height: 0; transition: opacity .15s; }
     .bar .seg.s { background: #b07dff; }                 /* démarrage */
@@ -74,28 +58,10 @@
     .pill.warn { border-color: #ff4d6d; color: #ff6d85; }
     .note { font-size: 13px; color: #cfcfcf; line-height: 1.6; }
   </style>
-</head>
-<body>
-  <div id="flash">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for category, msg in messages %}<div class="flash {{ category }}">{{ msg }}</div>{% endfor %}
-    {% endwith %}
-  </div>
+{% endblock %}
 
-  <div class="brandbar">
-    <a class="brand" href="{{ url_for('dashboard') }}">
-      <span class="logo"><span></span></span>
-      <span><b>clipstudio</b><small>auto-upload</small></span>
-    </a>
-    <div class="navlinks">
-      <a href="{{ url_for('dashboard') }}">Tableau de bord</a>
-      <a href="{{ url_for('library') }}">Bibliothèque</a>
-      <a href="{{ url_for('logs_page') }}">Logs</a>
-      <a href="{{ url_for('logout') }}">Déconnexion</a>
-    </div>
-  </div>
-
-  <div class="wrap">
+{% block main %}
+  <div class="page">
     <div class="head">
       <div>
         <h1>Heures de poste</h1>
@@ -121,11 +87,11 @@
     {% endif %}
 
     {% if not analysis %}
-      <div class="panel"><p class="muted">Aucune chaîne configurée.</p></div>
+      <p class="muted">Aucune chaîne configurée.</p>
     {% elif analysis.error %}
-      <div class="panel"><p class="muted">{{ analysis.error }}</p></div>
+      <p class="muted">{{ analysis.error }}</p>
     {% elif analysis.n_posts == 0 %}
-      <div class="panel"><p class="muted">
+      <p class="muted">
         {% if analysis.n_recent_excluded %}{{ analysis.n_recent_excluded }} vidéo(s) postée(s) mais toutes trop récentes
         (&lt; {{ analysis.min_age }} jours) pour être jugées — l'API Analytics a ~2-3 j de décalage.
         Baisse « l'âge mini » ci-dessus ou reviens dans quelques jours.
@@ -133,7 +99,7 @@
         fenêtre de jour {{ "%02dh"|format(analysis.window[0]) }}–{{ "%02dh"|format(analysis.window[1]) }} — élargis la
         fenêtre dans les réglages de la chaîne pour les analyser.
         {% else %}Aucune vidéo postée par cette chaîne pour l'instant — rien à analyser.
-        Les statistiques apparaîtront dès que des vidéos auront été publiées.{% endif %}</p></div>
+        Les statistiques apparaîtront dès que des vidéos auront été publiées.{% endif %}</p>
     {% else %}
       {% set analytics = analysis.method == 'analytics' %}
 
@@ -151,7 +117,7 @@
       </div>
 
       {% if not analytics %}
-      <div class="panel" style="margin-bottom:18px;border-left:3px solid #ffcf5c;">
+      <div class="block" style="border-top:none;border-left:3px solid #ffcf5c;padding:13px 0 13px 16px;margin-bottom:18px;">
         <p class="muted" style="margin:0;">⚠️ Métrique démarrage/après indisponible — affichage de repli basé sur les
         <b>vues/jour</b>. Causes possibles : « YouTube Analytics API » non activée dans le projet Google Cloud,
         permission Analytics non accordée (reconnecte la chaîne), ou aucune vidéo assez ancienne.</p>
@@ -183,7 +149,7 @@
         {% endif %}
       </div>
 
-      <div class="panel" style="margin-bottom:22px;">
+      <div class="block">
         <div class="k" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6f6f6f;">
           Heures de poste actuelles ({{ analysis.mode }})</div>
         <div class="pillrow">
@@ -247,10 +213,4 @@
 
     {% endif %}
   </div>
-
-  <script>
-    var fl = document.getElementById('flash');
-    if (fl && fl.children.length) setTimeout(function () { fl.style.transition = 'opacity .4s'; fl.style.opacity = '0'; }, 4000);
-  </script>
-</body>
-</html>
+{% endblock %}

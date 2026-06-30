@@ -232,59 +232,6 @@
     return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><span style="width:10px;height:3px;border-radius:2px;background:' + color + ';"></span><h3 style="margin:0;font-size:13px;font-weight:600;color:#ededed;">' + txt + suffix + "</h3></div>";
   }
 
-  // ---- sidebar ----
-  function sidebar() {
-    var items = sortedChannels().map(function (c) {
-      var on = !isGlobal() && c.id === view;
-      var subs = c.totals ? c.totals.subs + " abonnés" : "—";
-      return '<button data-navch="' + esc(c.id) + '" class="hov-item" style="position:relative;display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:none;cursor:pointer;border-radius:9px;padding:10px 10px 10px 14px;margin-bottom:3px;color:#fff;background:' + (on ? "#1f1f1f" : "transparent") + ';">' +
-        '<span style="position:absolute;left:4px;top:10px;bottom:10px;width:2px;border-radius:2px;background:' + (on ? COL.chart : "transparent") + ';"></span>' +
-        '<span style="width:8px;height:8px;border-radius:50%;flex:none;background:' + (c.connected ? COL.pos : "#8a8a8a") + ';"></span>' +
-        '<span style="display:flex;flex-direction:column;gap:2px;min-width:0;">' +
-        '<span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(c.id) + "</span>" +
-        '<span style="font-family:\'IBM Plex Mono\';font-size:10px;color:#8a8a8a;">' + esc(subs) + "</span></span></button>";
-    }).join("");
-
-    var gOn = isGlobal();
-    var secretTxt = DATA.hasSecrets ? "installé" : "à installer";
-    var secretCol = DATA.hasSecrets ? COL.pos : "#8a8a8a";
-
-    return '<aside style="width:266px;flex:none;background:#0c0c0c;color:#fff;display:flex;flex-direction:column;border-right:1px solid #1f1f1f;height:100vh;position:sticky;top:0;">' +
-      '<div style="padding:20px 20px 16px;display:flex;align-items:center;gap:11px;border-bottom:1px solid #1f1f1f;">' +
-        '<div style="width:28px;height:28px;border-radius:7px;background:#ff4d8d;display:flex;align-items:center;justify-content:center;flex:none;">' +
-          '<span style="width:0;height:0;border-left:10px solid #0c0c0c;border-top:6px solid transparent;border-bottom:6px solid transparent;margin-left:3px;"></span></div>' +
-        '<div style="display:flex;flex-direction:column;line-height:1.15;">' +
-          '<span style="font-weight:700;font-size:15px;letter-spacing:0.01em;">clipstudio</span>' +
-          '<span style="font-family:\'IBM Plex Mono\';font-size:10px;color:#7a7a7a;letter-spacing:0.09em;text-transform:uppercase;">auto-upload</span></div></div>' +
-      '<div style="padding:16px 14px 6px;">' +
-        '<button data-nav="global" class="hov-item" style="position:relative;display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:none;cursor:pointer;border-radius:9px;padding:11px 10px 11px 14px;color:#fff;background:' + (gOn ? "#1f1f1f" : "transparent") + ';">' +
-          '<span style="position:absolute;left:4px;top:11px;bottom:11px;width:2px;border-radius:2px;background:' + (gOn ? COL.chart : "transparent") + ';"></span>' +
-          '<span style="display:grid;grid-template-columns:6px 6px;gap:3px;flex:none;">' +
-            ["", "", "", ""].map(function () { return '<span style="width:6px;height:6px;border-radius:1.5px;background:' + (gOn ? COL.chart : "#9a9a9a") + ';"></span>'; }).join("") +
-          "</span>" +
-          '<span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:600;">Vue d\'ensemble</span>' +
-          '<span style="font-family:\'IBM Plex Mono\';font-size:10px;color:#8a8a8a;">cumul ' + channels.length + " chaînes</span></span></button></div>" +
-      '<div style="padding:8px 14px 8px;">' +
-        '<div style="font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.13em;color:#6f6f6f;text-transform:uppercase;padding:0 8px 10px;">Chaînes · ' + channels.length + "</div>" + items +
-        '<form method="post" action="/channels/add" style="display:flex;gap:6px;margin-top:8px;padding:0 2px;">' +
-          '<input name="name" placeholder="+ ajouter" style="' + S.input + 'flex:1;min-width:0;padding:7px 9px;font-size:12px;" class="foc">' +
-          '<button class="hov-ghost" style="' + S.ghost + 'padding:7px 10px;">OK</button></form></div>' +
-      '<div style="padding:2px 14px 8px;border-top:1px solid #1f1f1f;margin-top:6px;padding-top:12px;">' +
-        '<a href="/library" class="hov-item" style="display:flex;align-items:center;gap:10px;border-radius:9px;padding:10px 12px;color:#ededed;text-decoration:none;font-size:13px;font-weight:500;">📚 Bibliothèque</a>' +
-        '<a href="/logs" class="hov-item" style="display:flex;align-items:center;gap:10px;border-radius:9px;padding:10px 12px;margin-top:2px;color:#ededed;text-decoration:none;font-size:13px;font-weight:500;">🗒️ Logs</a>' +
-        '<a href="/hours" class="hov-item" style="display:flex;align-items:center;gap:10px;border-radius:9px;padding:10px 12px;margin-top:2px;color:#ededed;text-decoration:none;font-size:13px;font-weight:500;">🕒 Heures de poste</a>' +
-      "</div>" +
-      '<div style="margin-top:auto;padding:14px;border-top:1px solid #1f1f1f;">' +
-        '<div style="font-family:\'IBM Plex Mono\';font-size:10px;letter-spacing:0.13em;color:#6f6f6f;text-transform:uppercase;padding:0 8px 8px;">Clés partagées</div>' +
-        '<a href="/aide/client-secret" class="hov-item" style="display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:9px;background:#171717;text-decoration:none;">' +
-          '<span style="font-family:\'IBM Plex Mono\';font-size:11px;color:#cfcfcf;">client_secret.json</span>' +
-          '<span style="font-size:10px;color:' + secretCol + ';font-family:\'IBM Plex Mono\';">' + secretTxt + "</span></a>" +
-        '<div style="margin-top:8px;padding:0 2px;"><a href="/aide/client-secret" class="hov-item" style="display:flex;align-items:center;gap:9px;border-radius:9px;padding:9px 10px;color:#ededed;text-decoration:none;font-size:12px;">❓ Comment créer ce fichier</a></div>' +
-        '<div style="margin-top:12px;padding:0 8px;font-family:\'IBM Plex Mono\';font-size:11px;">' +
-          '<a class="muted-link" href="/logout">Déconnexion</a></div></div>' +
-      "</aside>";
-  }
-
   // ---- page : vue d'ensemble ----
   function globalPage() {
     var gt = globalTotals();
@@ -514,18 +461,17 @@
   function render() {
     CHARTS = {}; chartSeq = 0; hideChartTip();
     var body = isGlobal() ? globalPage() : channelPage();
-    root.innerHTML = '<div style="display:flex;min-height:100vh;width:100%;color:#ededed;background:#111;">' +
-      sidebar() +
-      '<main style="flex:1;min-width:0;background:#111;"><div style="max-width:1080px;margin:0 auto;padding:30px 38px 72px;">' +
-      body + "</div></main></div>";
+    // La sidebar est rendue côté serveur (shell) ; ici on ne remplit que le contenu.
+    root.innerHTML = '<div class="page">' + body + "</div>";
     window.scrollTo(0, 0);
   }
 
   root.addEventListener("click", function (e) {
+    // Navigation = vrais changements de page (la sidebar serveur reste affichée).
     var nav = e.target.closest("[data-nav]");
-    if (nav) { view = nav.getAttribute("data-nav"); render(); return; }
+    if (nav) { window.location = "/"; return; }
     var nc = e.target.closest("[data-navch]");
-    if (nc) { view = nc.getAttribute("data-navch"); render(); return; }
+    if (nc) { window.location = "/channel/" + encodeURIComponent(nc.getAttribute("data-navch")); return; }
     var r = e.target.closest("[data-range]");
     if (r) { var v = r.getAttribute("data-range"); range = v === "all" ? "all" : parseInt(v, 10); render(); return; }
     var md = e.target.closest("[data-mode]");

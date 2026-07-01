@@ -136,14 +136,50 @@
     <div class="step">
       <div class="num">2</div>
       <div>
-        <h3>Copie les fichiers</h3>
-        <p>Sur le serveur, copie ton dossier de vidéos dans <code>channels/&lt;nom&gt;/</code>.
-          En déploiement Docker, l'équivalent est un <code>docker cp</code> vers le volume de
-          données du conteneur, puis le planificateur prend le relais.</p>
-        <div class="callout">Après la copie, les vidéos apparaissent dans la file de la chaîne au
-          prochain rafraîchissement de la page. Aucune action supplémentaire n'est requise.</div>
+        <h3>Envoie le dossier sur le serveur (rsync)</h3>
+        <p>Depuis ta machine, copie le dossier de vidéos vers le serveur. La source peut être un
+          dossier local ou un montage cloud (ex. Proton Drive) — rsync télécharge les fichiers
+          « en ligne seulement » à la volée.</p>
+        <pre><code>rsync -avP &lt;dossier&gt;/ debian@51.77.159.241:/home/debian/&lt;dossier&gt;/</code></pre>
+        <p class="exts">Le serveur demande un mot de passe SSH (accès public, sans VPN).</p>
       </div>
     </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div>
+        <h3>Copie dans le conteneur (docker cp)</h3>
+        <p>Connecte-toi au serveur (<code>ssh -t</code> pour le mot de passe sudo), crée le dossier
+          de la chaîne dans le conteneur, puis copie les fichiers dedans :</p>
+        <pre><code>ssh -t debian@51.77.159.241
+sudo docker exec yt-poster mkdir -p /data/channels/&lt;chaine&gt;
+sudo docker cp /home/debian/&lt;dossier&gt;/. yt-poster:/data/channels/&lt;chaine&gt;/</code></pre>
+        <div class="callout">Le <code>.</code> après <code>&lt;dossier&gt;/</code> est important : il
+          copie le <b>contenu</b> du dossier, pas le dossier lui-même.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">4</div>
+      <div>
+        <h3>Vérifie puis nettoie</h3>
+        <p>Compte les fichiers arrivés dans le conteneur, puis supprime le dépôt temporaire du
+          serveur :</p>
+        <pre><code>sudo docker exec yt-poster ls /data/channels/&lt;chaine&gt;/ | wc -l
+rm -rf /home/debian/&lt;dossier&gt;</code></pre>
+        <div class="callout ok">Les vidéos apparaissent dans la file de la chaîne au prochain
+          rafraîchissement de la page. Le planificateur les poste ensuite tout seul (ou bouton
+          « Poster maintenant »). Aucune action supplémentaire n'est requise.</div>
+      </div>
+    </div>
+
+    <h2><span class="ico">✅</span>Variante : marquer des vidéos comme déjà postées</h2>
+    <p class="lead">Si un lot contient des vidéos <b>déjà publiées ailleurs</b> et que tu ne veux pas
+      les reposter, marque-les « faites » sans les envoyer. Le script <code>mark_done.py</code>
+      n'est pas versionné — à recréer si besoin, puis :</p>
+    <pre><code>sudo docker cp mark_done.py yt-poster:/tmp/m.py
+sudo docker exec yt-poster python3 /tmp/m.py &lt;chaine&gt; &lt;N&gt;</code></pre>
+    <p class="lead"><code>&lt;N&gt;</code> = nombre de vidéos à marquer comme déjà postées.</p>
 
     <div class="callout warn">Rappel quotas : ~100 vidéos/jour côté quota API, mais une chaîne
       récente ou non vérifiée est bridée par YouTube (~15–20/jour). Le planificateur étale les posts

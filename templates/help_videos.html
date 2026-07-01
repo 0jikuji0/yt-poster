@@ -30,6 +30,8 @@
     .callout.ok { border-color: #2ecf76; }
     .callout a { color: #ff6da3; }
     .exts { font-family: 'IBM Plex Mono'; font-size: 12.5px; color: #cfcfcf; }
+    .chtitle { margin: 16px 0 0; font-size: 13.5px; color: #ededed; }
+    .chtitle b { font-family: 'IBM Plex Mono'; color: #ff6da3; }
     table.meta { border-collapse: collapse; margin: 10px 0 2px; width: 100%; }
     table.meta td { border-top: 1px solid #1f1f1f; padding: 9px 10px; font-size: 13.5px; color: #c8c8c8;
       vertical-align: top; line-height: 1.55; }
@@ -149,13 +151,20 @@
       <div class="num">3</div>
       <div>
         <h3>Copie dans le conteneur (docker cp)</h3>
-        <p>Connecte-toi au serveur (<code>ssh -t</code> pour le mot de passe sudo), crée le dossier
-          de la chaîne dans le conteneur, puis copie les fichiers dedans :</p>
-        <pre><code>ssh -t debian@51.77.159.241
-sudo docker exec yt-poster mkdir -p /data/channels/&lt;chaine&gt;
-sudo docker cp /home/debian/&lt;dossier&gt;/. yt-poster:/data/channels/&lt;chaine&gt;/</code></pre>
-        <div class="callout">Le <code>.</code> après <code>&lt;dossier&gt;/</code> est important : il
-          copie le <b>contenu</b> du dossier, pas le dossier lui-même.</div>
+        <p>Connecte-toi au serveur (<code>ssh -t</code> pour le mot de passe sudo) :</p>
+        <pre><code>ssh -t debian@51.77.159.241</code></pre>
+        <p>Puis, selon la chaîne visée, colle le bloc correspondant (il crée le dossier si besoin
+          et copie le contenu du dépôt dedans) :</p>
+
+        {% for ch in channel_names %}
+          <p class="chtitle">→ Chaîne <b>{{ ch }}</b></p>
+          <pre><code>sudo docker exec yt-poster mkdir -p /data/channels/{{ ch }}
+sudo docker cp /home/debian/&lt;dossier&gt;/. yt-poster:/data/channels/{{ ch }}/</code></pre>
+        {% endfor %}
+
+        <div class="callout">Remplace <code>&lt;dossier&gt;</code> par le nom du dossier envoyé à
+          l'étape 2. Le <code>.</code> après <code>&lt;dossier&gt;/</code> est important : il copie le
+          <b>contenu</b> du dossier, pas le dossier lui-même.</div>
       </div>
     </div>
 
@@ -163,10 +172,12 @@ sudo docker cp /home/debian/&lt;dossier&gt;/. yt-poster:/data/channels/&lt;chain
       <div class="num">4</div>
       <div>
         <h3>Vérifie puis nettoie</h3>
-        <p>Compte les fichiers arrivés dans le conteneur, puis supprime le dépôt temporaire du
-          serveur :</p>
-        <pre><code>sudo docker exec yt-poster ls /data/channels/&lt;chaine&gt;/ | wc -l
-rm -rf /home/debian/&lt;dossier&gt;</code></pre>
+        <p>Compte les fichiers arrivés dans le conteneur (une ligne par chaîne — garde celle qui
+          te concerne) :</p>
+        <pre><code>{% for ch in channel_names %}sudo docker exec yt-poster ls /data/channels/{{ ch }}/ | wc -l
+{% endfor %}</code></pre>
+        <p>Puis supprime le dépôt temporaire du serveur :</p>
+        <pre><code>rm -rf /home/debian/&lt;dossier&gt;</code></pre>
         <div class="callout ok">Les vidéos apparaissent dans la file de la chaîne au prochain
           rafraîchissement de la page. Le planificateur les poste ensuite tout seul (ou bouton
           « Poster maintenant »). Aucune action supplémentaire n'est requise.</div>

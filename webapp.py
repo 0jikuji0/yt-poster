@@ -1167,8 +1167,10 @@ def help_index():
 @login_required
 def help_videos():
     """Documentation : comment ajouter des vidéos à une chaîne (dépôt web, paires
-    .json pour un titre par vidéo, et copie en masse côté serveur)."""
-    return render_template("help_videos.html")
+    .json pour un titre par vidéo, et copie en masse côté serveur). La liste réelle
+    des chaînes est passée pour générer les commandes CLI prêtes à copier."""
+    return render_template("help_videos.html",
+                           channel_names=list(config["channels"].keys()))
 
 
 @app.route("/aide/statistiques")

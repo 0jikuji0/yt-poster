@@ -65,7 +65,8 @@
     <div class="head">
       <div>
         <h1>Heures de poste</h1>
-        <p class="sub">Performance des vidéos selon l'heure de mise en ligne — repère les heures à privilégier ou à bloquer.</p>
+        <p class="sub">Performance des vidéos selon l'heure de mise en ligne — repère les heures à privilégier ou à bloquer.
+          <a href="{{ url_for('help_stats') }}" style="color:#ff6da3">❓ Comment lire cette page</a></p>
       </div>
       <a class="btn" href="{{ url_for('hours_page', channel=sel, days=days) if sel else url_for('hours_page') }}">↻ Rafraîchir</a>
     </div>

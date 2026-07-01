@@ -1,0 +1,122 @@
+{% extends "_shell.html" %}
+{% block title %}Comprendre les statistiques — clipstudio{% endblock %}
+
+{% block styles %}
+  <style>
+    .page.narrow { max-width: 880px; }
+    h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.015em; color: #f5f5f5; margin: 0; }
+    .sub { color: #8a8a8a; font-size: 14px; margin: 8px 0 26px; line-height: 1.6; }
+    h2 { font-size: 19px; color: #f3f3f3; font-weight: 600; margin: 34px 0 4px; }
+    h2 .ico { margin-right: 8px; }
+    .lead { color: #9a9a9a; font-size: 13.5px; margin: 0 0 14px; line-height: 1.6; }
+    .step { display: flex; gap: 16px; padding: 18px 0; border-top: 1px solid #1f1f1f; }
+    .step:first-of-type { border-top: none; }
+    .num { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #ff4d8d; color: #111;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+    .step h3 { margin: 3px 0 8px; font-size: 15px; color: #f3f3f3; font-weight: 600; }
+    .step p, .step li { color: #c8c8c8; font-size: 14px; line-height: 1.65; }
+    .step ul { margin: 8px 0 0; padding-left: 18px; }
+    .step a { color: #ff6da3; }
+    code { font-family: 'IBM Plex Mono'; font-size: 12.5px; background: #161616; border: 1px solid #2a2a2a;
+      padding: 2px 6px; border-radius: 5px; color: #ededed; }
+    .callout { background: #161616; border-left: 3px solid #ffcf5c; border-radius: 0 9px 9px 0;
+      padding: 13px 16px; margin: 12px 0 2px; font-size: 13.5px; color: #d8d8d8; line-height: 1.6; }
+    .callout.warn { border-color: #ff4d6d; }
+    .callout.ok { border-color: #2ecf76; }
+    .callout a { color: #ff6da3; }
+    .pill { display: inline-block; font-family: 'IBM Plex Mono'; font-size: 11px; padding: 2px 8px;
+      border-radius: 999px; background: rgba(56,211,159,.15); color: #38d39f; vertical-align: middle; }
+  </style>
+{% endblock %}
+
+{% block main %}
+  <div class="page narrow">
+    <h1>Comprendre les statistiques</h1>
+    <p class="sub">L'outil expose deux niveaux de stats : le <b>suivi local</b> (ce que clipstudio a
+      posté, toujours disponible) et les <b>stats live YouTube</b> (vues, abonnés, likes… récupérées
+      directement via l'API officielle). Cette page explique comment les activer et lire la page
+      <a href="{{ url_for('hours_page') }}" style="color:#ff6da3">Heures de poste</a>.</p>
+
+    <!-- ============ 1. STATS LIVE ============ -->
+    <h2><span class="ico">📊</span>Activer les stats live YouTube</h2>
+    <p class="lead">Sur la page <a href="{{ url_for('stats') }}" style="color:#ff6da3">Statistiques</a>,
+      sélectionne une chaîne : tu vois ses abonnés, ses vues totales et le détail vue par vue des
+      vidéos postées par l'outil. Ces chiffres viennent en direct de l'API YouTube — deux conditions
+      doivent être réunies.</p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h3>La chaîne doit être connectée en OAuth</h3>
+        <p>Va sur la page de la chaîne et clique <b>« Connecter »</b> pour autoriser l'accès à son
+          compte YouTube. Une chaîne connectée affiche une pastille verte
+          <span class="sb-dot connected" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2ecf76;"></span>
+          dans la barre latérale. Sans connexion, aucune stat live ne peut être lue.</p>
+        <div class="callout warn">⚠️ Si l'écran de consentement Google est resté en mode <b>« Test »</b>,
+          l'autorisation expire au bout de <b>7 jours</b> : la chaîne se déconnecte et les stats
+          disparaissent. Passe l'écran en « Production » — voir la
+          <a href="{{ url_for('help_credentials') }}">doc client_secret.json</a>.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h3>L'API YouTube Analytics doit être activée</h3>
+        <p>Dans le projet Google Cloud, l'API <code>YouTube Data API v3</code> suffit pour poster,
+          mais les stats par jour et l'analyse des heures réclament aussi
+          <code>YouTube Analytics API</code>. Active-la dans
+          <b>API et services → Bibliothèque</b> (étape détaillée dans la
+          <a href="{{ url_for('help_credentials') }}">doc client_secret.json</a>).</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div>
+        <h3>Rafraîchir les chiffres</h3>
+        <p>Les stats live sont mises en cache <b>10 minutes</b> pour économiser le quota API. Le
+          bouton <b>« ↻ Actualiser les stats »</b> en haut du détail d'une chaîne force une nouvelle
+          récupération immédiate.</p>
+      </div>
+    </div>
+
+    <div class="callout ok">Astuce : le bloc <b>« Suivi manuel des vues »</b> reste utile même sans
+      stats live — tu peux saisir des relevés de vues à la main sur la page de la chaîne pour tracer
+      une courbe d'évolution.</div>
+
+    <!-- ============ 2. HEURES DE POSTE ============ -->
+    <h2><span class="ico">🕒</span>La page « Heures de poste »</h2>
+    <p class="lead">Cette page croise <b>l'heure à laquelle chaque vidéo a été postée</b> avec les
+      <b>vues qu'elle a obtenues</b>, pour repérer les créneaux qui marchent et ceux qui ne rapportent
+      rien. Objectif : régler le planificateur pour ne poster qu'aux bonnes heures.</p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h3>Lire le tableau</h3>
+        <p>Pour chaque heure de la journée, tu vois combien de vidéos y ont été postées et la moyenne
+          de vues récoltées. Une heure « <b>nulle</b> » = des vidéos postées mais sans audience : c'est
+          un créneau à éviter.</p>
+        <div class="callout">Une vidéo n'est comptée qu'à partir de <code>{{ EARLY_MIN_AGE_DAYS }}</code>
+          jours d'ancienneté (réglable via le sélecteur « jours »), le temps qu'elle accumule assez de
+          vues pour que la mesure soit fiable.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h3>Agir sur le planificateur</h3>
+        <p>Une fois les bons créneaux identifiés, ajuste la <b>fenêtre horaire</b> de la chaîne
+          (<code>window_start</code>–<code>window_end</code>) sur sa page de réglages, ou réduis le
+          nombre de posts/jour. Le planificateur tirera ses heures aléatoires uniquement dans cette
+          fenêtre.</p>
+      </div>
+    </div>
+
+    <div class="callout warn">À retenir : l'analyse des heures s'appuie sur les vues, elle exige donc
+      les mêmes prérequis que les stats live (chaîne <b>connectée</b> + <b>YouTube Analytics API</b>
+      activée).</div>
+  </div>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "_shell.html" %}
+{% block title %}Documentation — clipstudio{% endblock %}
+
+{% block styles %}
+  <style>
+    .page.narrow { max-width: 880px; }
+    h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.015em; color: #f5f5f5; margin: 0; }
+    .sub { color: #8a8a8a; font-size: 14px; margin: 8px 0 26px; line-height: 1.6; }
+    h2 { font-size: 19px; color: #f3f3f3; font-weight: 600; margin: 34px 0 12px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+    .card { display: block; text-decoration: none; background: #161616; border: 1px solid #242424;
+      border-radius: 12px; padding: 18px 18px 16px; transition: border-color .15s, transform .15s; }
+    .card:hover { border-color: #ff4d8d; transform: translateY(-2px); }
+    .card .ico { font-size: 22px; }
+    .card h3 { margin: 10px 0 6px; font-size: 15.5px; color: #f3f3f3; font-weight: 600; }
+    .card p { margin: 0; color: #9a9a9a; font-size: 13px; line-height: 1.55; }
+    .card .tag { display: inline-block; margin-top: 12px; font-family: 'IBM Plex Mono'; font-size: 11px;
+      padding: 2px 9px; border-radius: 999px; }
+    .tag.ok { background: rgba(56,211,159,.15); color: #38d39f; }
+    .tag.no { background: rgba(255,77,109,.16); color: #ff6d85; }
+    .tag.neutral { background: rgba(255,255,255,.06); color: #b0b0b0; }
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; align-items: center; }
+    .flow .b { background: #1c1c1c; border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px 12px;
+      font-size: 13px; color: #ededed; }
+    .flow .arr { color: #666; font-size: 15px; }
+    .lead { color: #9a9a9a; font-size: 13.5px; margin: 0 0 14px; line-height: 1.65; }
+    .lead a { color: #ff6da3; }
+  </style>
+{% endblock %}
+
+{% block main %}
+  <div class="page narrow">
+    <h1>Documentation</h1>
+    <p class="sub">Tout ce qu'il faut pour faire tourner clipstudio : connecter tes chaînes YouTube,
+      déposer des vidéos et comprendre les statistiques. Chaque fiche ci-dessous détaille une étape.</p>
+
+    <!-- ============ PARCOURS ============ -->
+    <h2>En bref</h2>
+    <p class="lead">clipstudio poste automatiquement les vidéos que tu lui donnes sur YouTube (en Shorts),
+      à des heures choisies par son planificateur intégré. Le parcours type :</p>
+    <div class="flow">
+      <span class="b">1 · client_secret.json</span>
+      <span class="arr">→</span>
+      <span class="b">2 · Connecter la chaîne</span>
+      <span class="arr">→</span>
+      <span class="b">3 · Déposer des vidéos</span>
+      <span class="arr">→</span>
+      <span class="b">4 · Le planificateur poste</span>
+    </div>
+
+    <!-- ============ FICHES ============ -->
+    <h2>Les fiches</h2>
+    <div class="cards">
+      <a class="card" href="{{ url_for('help_credentials') }}">
+        <div class="ico">🔑</div>
+        <h3>Créer le client_secret.json</h3>
+        <p>Configurer Google Cloud et l'OAuth pour autoriser clipstudio à poster sur tes chaînes. À faire une seule fois.</p>
+        {% if has_secrets %}
+          <span class="tag ok">✓ installé</span>
+        {% else %}
+          <span class="tag no">✗ à installer</span>
+        {% endif %}
+      </a>
+
+      <a class="card" href="{{ url_for('help_videos') }}">
+        <div class="ico">🎬</div>
+        <h3>Ajouter des vidéos</h3>
+        <p>Déposer des vidéos dans une chaîne (glisser-déposer web ou en masse), et donner à chacune son titre, sa description et ses tags.</p>
+        <span class="tag neutral">guide pratique</span>
+      </a>
+
+      <a class="card" href="{{ url_for('help_stats') }}">
+        <div class="ico">📊</div>
+        <h3>Comprendre les statistiques</h3>
+        <p>Activer les stats live YouTube et lire la page « Heures de poste » pour poster aux meilleurs créneaux.</p>
+        <span class="tag neutral">guide pratique</span>
+      </a>
+    </div>
+
+    <!-- ============ RACCOURCIS ============ -->
+    <h2>Raccourcis utiles</h2>
+    <div class="cards">
+      <a class="card" href="{{ url_for('dashboard') }}">
+        <div class="ico">🏠</div>
+        <h3>Vue d'ensemble</h3>
+        <p>L'état de toutes les chaînes : connexion, file d'attente, prochains posts.</p>
+      </a>
+      <a class="card" href="{{ url_for('hours_page') }}">
+        <div class="ico">🕒</div>
+        <h3>Heures de poste</h3>
+        <p>Les créneaux qui rapportent le plus de vues, chaîne par chaîne.</p>
+      </a>
+      <a class="card" href="{{ url_for('logs_page') }}">
+        <div class="ico">🗒️</div>
+        <h3>Logs</h3>
+        <p>L'activité du planificateur : ce qui a été posté, quand, et les erreurs éventuelles.</p>
+      </a>
+    </div>
+  </div>
+{% endblock %}

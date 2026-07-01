@@ -36,6 +36,7 @@
     <a class="sb-item hov-item {{ 'on' if request.endpoint == 'logs_page' else '' }}" href="{{ url_for('logs_page') }}">🗒️ <span>Logs</span></a>
     <a class="sb-item hov-item {{ 'on' if request.endpoint == 'hours_page' else '' }}" href="{{ url_for('hours_page') }}">🕒 <span>Heures de poste</span></a>
     <a class="sb-item hov-item {{ 'on' if request.endpoint == 'stats' else '' }}" href="{{ url_for('stats') }}">📊 <span>Statistiques</span></a>
+    <a class="sb-item hov-item {{ 'on' if request.endpoint in ['help_index', 'help_videos', 'help_stats', 'help_credentials'] else '' }}" href="{{ url_for('help_index') }}">📖 <span>Documentation</span></a>
   </div>
 
   <div class="sb-foot">
@@ -46,6 +47,7 @@
     </a>
     <div style="margin-top:8px;padding:0 2px;">
       <a class="sb-item hov-item" style="font-size:12px;" href="{{ url_for('help_credentials') }}">❓ <span>Comment créer ce fichier</span></a>
+      <a class="sb-item hov-item" style="font-size:12px;" href="{{ url_for('help_index') }}">📖 <span>Toute la documentation</span></a>
     </div>
     <div style="margin-top:12px;padding:0 8px;font-family:'IBM Plex Mono';font-size:11px;">
       <a class="muted-link" href="{{ url_for('logout') }}">Déconnexion</a>

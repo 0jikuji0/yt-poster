@@ -1155,6 +1155,31 @@ def help_credentials():
                            has_secrets=SECRETS_PATH.exists())
 
 
+@app.route("/aide")
+@login_required
+def help_index():
+    """Hub de documentation : regroupe toutes les fiches d'aide en un seul endroit."""
+    return render_template("help_index.html",
+                           has_secrets=SECRETS_PATH.exists())
+
+
+@app.route("/aide/videos")
+@login_required
+def help_videos():
+    """Documentation : comment ajouter des vidéos à une chaîne (dépôt web, paires
+    .json pour un titre par vidéo, et copie en masse côté serveur)."""
+    return render_template("help_videos.html")
+
+
+@app.route("/aide/statistiques")
+@login_required
+def help_stats():
+    """Documentation : comment activer les stats live YouTube (OAuth + YouTube
+    Analytics API) et lire la page « Heures de poste »."""
+    return render_template("help_stats.html",
+                           EARLY_MIN_AGE_DAYS=EARLY_MIN_AGE_DAYS)
+
+
 def views_sparkline(views, w=600, h=140, pad=14):
     """Construit les données d'un mini-graphe SVG à partir des relevés de vues."""
     vals = [int(e["views"]) for e in views]

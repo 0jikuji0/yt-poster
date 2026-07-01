@@ -1,0 +1,152 @@
+{% extends "_shell.html" %}
+{% block title %}Ajouter des vidéos — clipstudio{% endblock %}
+
+{% block styles %}
+  <style>
+    .page.narrow { max-width: 880px; }
+    h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.015em; color: #f5f5f5; margin: 0; }
+    .sub { color: #8a8a8a; font-size: 14px; margin: 8px 0 26px; line-height: 1.6; }
+    .sub a { color: #ff6da3; }
+    h2 { font-size: 19px; color: #f3f3f3; font-weight: 600; margin: 34px 0 4px; }
+    h2 .ico { margin-right: 8px; }
+    .lead { color: #9a9a9a; font-size: 13.5px; margin: 0 0 14px; line-height: 1.65; }
+    .lead a { color: #ff6da3; }
+    .step { display: flex; gap: 16px; padding: 18px 0; border-top: 1px solid #1f1f1f; }
+    .step:first-of-type { border-top: none; }
+    .num { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #ff4d8d; color: #111;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+    .step h3 { margin: 3px 0 8px; font-size: 15px; color: #f3f3f3; font-weight: 600; }
+    .step p, .step li { color: #c8c8c8; font-size: 14px; line-height: 1.65; }
+    .step ul { margin: 8px 0 0; padding-left: 18px; }
+    .step a { color: #ff6da3; }
+    code { font-family: 'IBM Plex Mono'; font-size: 12.5px; background: #161616; border: 1px solid #2a2a2a;
+      padding: 2px 6px; border-radius: 5px; color: #ededed; }
+    pre { background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 10px; padding: 14px 16px;
+      overflow-x: auto; margin: 12px 0 2px; }
+    pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.6; color: #dcdcdc; }
+    .callout { background: #161616; border-left: 3px solid #ffcf5c; border-radius: 0 9px 9px 0;
+      padding: 13px 16px; margin: 12px 0 2px; font-size: 13.5px; color: #d8d8d8; line-height: 1.6; }
+    .callout.warn { border-color: #ff4d6d; }
+    .callout.ok { border-color: #2ecf76; }
+    .callout a { color: #ff6da3; }
+    .exts { font-family: 'IBM Plex Mono'; font-size: 12.5px; color: #cfcfcf; }
+    table.meta { border-collapse: collapse; margin: 10px 0 2px; width: 100%; }
+    table.meta td { border-top: 1px solid #1f1f1f; padding: 9px 10px; font-size: 13.5px; color: #c8c8c8;
+      vertical-align: top; line-height: 1.55; }
+    table.meta td:first-child { white-space: nowrap; }
+  </style>
+{% endblock %}
+
+{% block main %}
+  <div class="page narrow">
+    <h1>Ajouter des vidéos à une chaîne</h1>
+    <p class="sub">Une fois une chaîne <b>connectée</b> (voir la
+      <a href="{{ url_for('help_credentials') }}">doc client_secret.json</a>), il suffit de lui
+      donner des vidéos : le <b>planificateur</b> les publiera tout seul, une par une, aux heures
+      configurées. Chaque vidéo peut avoir son propre titre / description / tags.</p>
+
+    <!-- ============ 1. GLISSER-DÉPOSER ============ -->
+    <h2><span class="ico">🎬</span>Méthode simple : le dépôt web</h2>
+    <p class="lead">C'est la méthode recommandée pour quelques vidéos à la fois.</p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h3>Ouvre la chaîne, section « Déposer des vidéos »</h3>
+        <p>Clique sur une chaîne dans la barre latérale. Sur sa page, la carte
+          <b>« Déposer des vidéos »</b> contient une zone <b>＋ Fichiers vidéo + .json</b> :
+          clique dessus pour choisir un ou plusieurs fichiers (sélection multiple possible).</p>
+        <p class="exts">Formats acceptés : .mp4 · .mov · .avi · .mkv · .webm · .flv · .m4v</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h3>Renseigne les métadonnées communes</h3>
+        <p>Sous la zone de dépôt, les champs s'appliquent à <b>toutes les vidéos déposées qui n'ont
+          pas leur propre fichier JSON</b> :</p>
+        <table class="meta">
+          <tr><td><b>Titre</b></td><td>Vide = le nom du fichier est utilisé comme titre.</td></tr>
+          <tr><td><b>Description</b></td><td>Texte libre. Laissé vide (et sans tags), la chaîne pioche dans son réservoir de hashtags configuré.</td></tr>
+          <tr><td><b>Tags</b></td><td>Séparés par des virgules, ex. <code>clip, best-of, 2026</code>.</td></tr>
+          <tr><td><b>Confidentialité</b></td><td><code>public</code>, <code>unlisted</code> (non répertorié) ou <code>private</code>.</td></tr>
+          <tr><td><b>Contenu pour enfants</b></td><td>« Made for kids » YouTube. Laisse sur <b>Non</b> sauf obligation légale.</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div>
+        <h3>Clique « Ajouter à la file »</h3>
+        <p>Les vidéos rejoignent la file d'attente de la chaîne. Le planificateur les postera
+          automatiquement dans la fenêtre horaire réglée, ou tu peux forcer avec
+          <b>« Poster maintenant »</b>. Une vidéo déjà postée n'est jamais republiée.</p>
+      </div>
+    </div>
+
+    <div class="callout ok">Astuce : tu peux aussi déposer des vidéos depuis la page
+      <a href="{{ url_for('library') }}">Bibliothèque</a>, qui regroupe la file de toutes les chaînes.</div>
+
+    <!-- ============ 2. PAIRES JSON ============ -->
+    <h2><span class="ico">🏷️</span>Un titre différent par vidéo : les paires .json</h2>
+    <p class="lead">Pour donner à <b>chaque</b> vidéo son propre titre/description/tags (au lieu des
+      champs communs), dépose à côté de la vidéo un fichier <b>JSON du même nom</b> :
+      <code>clip01.mp4</code> + <code>clip01.json</code>. clipstudio les associe par leur nom de base.</p>
+
+    <p class="lead">Contenu type d'un fichier <code>.json</code> :</p>
+    <pre><code>{
+  "title": "Mon meilleur clip 😂",
+  "description": "Abonne-toi pour plus !\n#shorts #gaming",
+  "tags": ["shorts", "gaming", "best-of"],
+  "privacy": "public",
+  "made_for_kids": false
+}</code></pre>
+    <div class="callout">Seul <code>title</code> est vraiment indispensable. <code>privacy</code> et
+      <code>made_for_kids</code> sont optionnels (valeurs par défaut de la chaîne sinon). Un JSON
+      invalide est ignoré et les champs communs du formulaire prennent le relais.</div>
+    <div class="callout ok">Tu peux déposer <b>en une fois</b> un lot de paires
+      (<code>clip01.mp4</code>, <code>clip01.json</code>, <code>clip02.mp4</code>, <code>clip02.json</code>…) :
+      chaque vidéo récupère son propre JSON. Un <code>.json</code> déposé seul met à jour les
+      métadonnées d'une vidéo déjà en file portant le même nom.</div>
+
+    <!-- ============ 3. EN MASSE ============ -->
+    <h2><span class="ico">📦</span>En masse : beaucoup de vidéos d'un coup</h2>
+    <p class="lead">Pour des dizaines de vidéos, le dépôt navigateur reste possible (sélection
+      multiple), mais devient lourd. Sur une installation serveur, on peut aussi copier les fichiers
+      directement dans le dossier de la chaîne, sans passer par l'interface.</p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h3>Structure d'un dossier de chaîne</h3>
+        <p>Chaque chaîne a son dossier <code>channels/&lt;nom&gt;/</code>. On y dépose les vidéos
+          (et éventuellement leurs JSON du même nom) :</p>
+        <pre><code>channels/ma_chaine/
+├── clip01.mp4
+├── clip01.json   (optionnel — sinon titre = nom du fichier)
+├── clip02.mp4
+└── ...</code></pre>
+        <p>Les vidéos <b>sans JSON</b> suffisent : clipstudio crée le sidecar automatiquement
+          (titre = nom du fichier).</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h3>Copie les fichiers</h3>
+        <p>Sur le serveur, copie ton dossier de vidéos dans <code>channels/&lt;nom&gt;/</code>.
+          En déploiement Docker, l'équivalent est un <code>docker cp</code> vers le volume de
+          données du conteneur, puis le planificateur prend le relais.</p>
+        <div class="callout">Après la copie, les vidéos apparaissent dans la file de la chaîne au
+          prochain rafraîchissement de la page. Aucune action supplémentaire n'est requise.</div>
+      </div>
+    </div>
+
+    <div class="callout warn">Rappel quotas : ~100 vidéos/jour côté quota API, mais une chaîne
+      récente ou non vérifiée est bridée par YouTube (~15–20/jour). Le planificateur étale les posts
+      pour rester sous ces limites — inutile de tout vouloir poster le même jour.</div>
+  </div>
+{% endblock %}

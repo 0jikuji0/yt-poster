@@ -51,7 +51,12 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 3.5V7l-4 3.5z"/></svg>
       Créer
     </button>
-    <div class="tb-avatar" title="{{ cur.title or cur_id }}">{{ (cur_id or '?')[:1] }}</div>
+    <div class="tb-avatar" title="{{ cur.title or cur_id }}">
+      {%- if cur.avatar -%}
+        <img src="{{ cur.avatar }}" alt="" referrerpolicy="no-referrer"
+             onerror="this.remove()">{{ (cur_id or '?')[:1] }}
+      {%- else -%}{{ (cur_id or '?')[:1] }}{%- endif -%}
+    </div>
   </div>
 </header>
 

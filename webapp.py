@@ -111,6 +111,7 @@ def default_channel() -> dict:
         "window_end": 21,      # heure de fin
         "privacy": "public",   # valeur par défaut pour les nouvelles vidéos
         "title": None,         # nom de la chaîne (rempli à la connexion OAuth)
+        "avatar": None,        # URL de la photo de profil YouTube (remplie à la connexion)
         "views": [],           # relevés manuels de vues : [{"date": "...", "views": N}, ...]
         "hashtags_core": [],   # hashtags toujours présents (sans #), ex. ["football", "foot"]
         "hashtags_pool": [],   # réservoir piochés au hasard par vidéo (sans #)
@@ -205,8 +206,26 @@ def get_youtube(name: str):
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
 
+def _store_channel_snippet(name: str, snippet: dict) -> None:
+    """Mémorise nom + photo de profil de la chaîne dans la config (si changés)."""
+    ch = config["channels"].get(name)
+    if ch is None:
+        return
+    thumbs = snippet.get("thumbnails") or {}
+    avatar = (thumbs.get("medium") or thumbs.get("default") or {}).get("url")
+    changed = False
+    if snippet.get("title") and ch.get("title") != snippet["title"]:
+        ch["title"] = snippet["title"]
+        changed = True
+    if avatar and ch.get("avatar") != avatar:
+        ch["avatar"] = avatar
+        changed = True
+    if changed:
+        save_config()
+
+
 def fetch_channel_title(name: str):
-    """Récupère et mémorise le nom de la chaîne (1 unité de quota)."""
+    """Récupère et mémorise le nom et la photo de profil de la chaîne (1 unité)."""
     youtube = get_youtube(name)
     if not youtube:
         return None
@@ -214,10 +233,8 @@ def fetch_channel_title(name: str):
         resp = youtube.channels().list(part="snippet", mine=True).execute()
         items = resp.get("items", [])
         if items:
-            title = items[0]["snippet"]["title"]
-            config["channels"][name]["title"] = title
-            save_config()
-            return title
+            _store_channel_snippet(name, items[0]["snippet"])
+            return items[0]["snippet"]["title"]
     except HttpError as e:
         log.warning("[%s] impossible de lire le nom de la chaîne : %s", name, e)
     return None
@@ -570,6 +587,7 @@ def channel_card(name: str) -> dict:
     return {
         "id": name,
         "title": ch.get("title"),
+        "avatar": ch.get("avatar"),
         "connected": token_path(name).exists(),
         "active": bool(ch.get("enabled")),
         "privacy": ch.get("privacy", "public"),
@@ -778,7 +796,7 @@ def fetch_channel_totals(name: str, force: bool = False):
     yt = get_youtube(name)
     if yt:
         try:
-            resp = yt.channels().list(part="statistics", mine=True).execute()
+            resp = yt.channels().list(part="statistics,snippet", mine=True).execute()
             items = resp.get("items", [])
             if items:
                 s = items[0]["statistics"]
@@ -786,6 +804,8 @@ def fetch_channel_totals(name: str, force: bool = False):
                        "views": int(s.get("viewCount", 0)),
                        "videos": int(s.get("videoCount", 0)),
                        "subs_hidden": bool(s.get("hiddenSubscriberCount", False))}
+                # Au passage : nom + photo de profil à jour pour l'UI.
+                _store_channel_snippet(name, items[0].get("snippet") or {})
         except HttpError as e:
             log.warning("[%s] totaux indisponibles : %s", name, e)
     _TOTALS_CACHE[name] = (now, out)

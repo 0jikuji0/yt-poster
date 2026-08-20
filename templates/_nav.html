@@ -3,7 +3,12 @@
 <aside class="sidebar">
 
   <div class="sb-channel" id="chSwitch" title="Changer de chaîne">
-    <div class="sb-ava {{ 'on' if cur.connected }}">{{ (cur_id or '?')[:1] }}</div>
+    <div class="sb-ava {{ 'on' if cur.connected }}">
+      {%- if cur.avatar -%}
+        <img src="{{ cur.avatar }}" alt="" referrerpolicy="no-referrer"
+             onerror="this.remove()">{{ (cur_id or '?')[:1] }}
+      {%- else -%}{{ (cur_id or '?')[:1] }}{%- endif -%}
+    </div>
     <div class="sb-chname">Votre chaîne</div>
     <div class="sb-chsub">{{ cur.title or cur_id }}</div>
   </div>

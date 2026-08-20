@@ -1,0 +1,181 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Données analytiques de la chaîne</h1>
+    <div class="page-sub">{{ c.title or c.id }} — YouTube Analytics (2 à 3 jours de décalage)</div>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a class="btn ghost" href="{{ url_for('analytics', c=c.id, refresh=1) }}">↻ Actualiser</a>
+    <a class="btn" href="{{ url_for('heures', c=c.id) }}">Meilleures heures</a>
+  </div>
+</div>
+
+{% if not c.connected %}
+<div class="banner warn">
+  <span class="ic">🔌</span>
+  <div><div class="t">Chaîne non connectée</div>
+       <div class="s">Impossible de récupérer les vues et les abonnés sans autorisation YouTube.</div></div>
+  <a class="btn primary" href="{{ url_for('connect', name=c.id) }}">Connecter</a>
+</div>
+{% elif a.error %}
+<div class="banner warn">
+  <span class="ic">⚠️</span>
+  <div><div class="t">L'API Analytics a renvoyé une erreur</div>
+       <div class="s mono tiny">{{ a.error[:220] }}</div></div>
+  <a class="btn" href="{{ url_for('connect', name=c.id) }}">Reconnecter</a>
+</div>
+{% endif %}
+
+<div class="dash">
+  {# ------------------------------ colonne principale ------------------------------ #}
+  <div>
+    <div class="card">
+      <div class="card-b">
+        <h2 style="font-size:22px;text-align:center;line-height:1.35;margin-bottom:22px;">
+          {% if a.cur28.views %}
+            Ta chaîne a enregistré <b>{{ a.cur28.views|n }}</b> vues au cours des 28 derniers jours
+          {% else %}
+            Pas encore de vues enregistrées sur les 28 derniers jours
+          {% endif %}
+        </h2>
+
+        <div class="kpis">
+          <div class="kpi">
+            <div class="l">Vues</div>
+            <div class="v">{{ a.cur28.views|n }}</div>
+            <div class="c">
+              {% if a.views_pct is not none %}
+                <span class="{{ 'up' if a.views_pct >= 0 else 'down' }}">{{ a.views_pct|signed }} %</span> vs 28 j précédents
+              {% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="l">Abonnés gagnés</div>
+            <div class="v">{{ a.cur28.subs|signed }}</div>
+            <div class="c">
+              {% if a.subs_pct is not none %}
+                <span class="{{ 'up' if a.subs_pct >= 0 else 'down' }}">{{ a.subs_pct|signed }} %</span> vs 28 j précédents
+              {% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="l">Vues totales</div>
+            <div class="v">{{ a.totals.views|n if a.totals else '—' }}</div>
+            <div class="c">{{ a.totals.videos|n if a.totals else c.posted }} vidéo(s) en ligne</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 10px;flex-wrap:wrap;"
+             data-charts="rangeLbl">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="width:14px;height:3px;border-radius:2px;background:var(--chart);display:inline-block;"></span>
+            <b style="font-weight:500;">Vues</b>
+            <span class="tiny muted" id="rangeLbl">28 jours</span>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <div class="seg">
+              <button data-set-mode="day" class="on">Par jour</button>
+              <button data-set-mode="cum">Cumulé</button>
+            </div>
+            <div class="seg">
+              <button data-set-range="7">7 j</button>
+              <button data-set-range="28" class="on">28 j</button>
+              <button data-set-range="90">3 mois</button>
+              <button data-set-range="all">Tout</button>
+            </div>
+          </div>
+        </div>
+        <div data-chart='{{ a.daily|tojson }}' data-key="views" data-range="28" style="height:230px;"></div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin:28px 0 10px;">
+          <span style="width:14px;height:3px;border-radius:2px;background:var(--chart-2);display:inline-block;"></span>
+          <b style="font-weight:500;">Abonnés gagnés / perdus</b>
+        </div>
+        <div data-chart='{{ a.daily|tojson }}' data-key="subs" data-range="28" style="height:180px;"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px;">
+      <div class="card-h"><h2>Jour par jour</h2>
+        <span class="tiny muted">{{ a.daily|length }} jour(s) de données</span></div>
+      {% if a.daily %}
+      <table class="tbl">
+        <thead><tr><th>Date</th><th class="num">Vues</th><th class="num">Abonnés Δ</th></tr></thead>
+        <tbody>
+          {% for d in a.daily[-30:]|reverse %}
+          <tr>
+            <td class="muted">{{ d.date|frdate }}</td>
+            <td class="num">{{ d.views|n }}</td>
+            <td class="num {{ 'up' if d.subs > 0 else ('down' if d.subs < 0 else 'muted') }}">{{ d.subs|signed }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty"><div class="ic">📈</div><h3>Aucune donnée</h3>
+        <p class="tiny">Les statistiques apparaissent 2 à 3 jours après la publication.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# --------------------------------- colonne droite --------------------------------- #}
+  <aside class="grid" style="gap:24px;">
+    <section class="card">
+      <div class="card-h"><h2>Temps réel</h2></div>
+      <div class="card-b">
+        <div class="stat-big">{{ a.totals.subs|n if a.totals else '—' }}</div>
+        <div class="stat-lbl">Abonnés</div>
+
+        <div style="height:1px;background:var(--line);margin:18px 0;"></div>
+
+        {% set last48 = a.daily[-2:]|sum(attribute='views') if a.daily else 0 %}
+        <div class="stat-big" style="font-size:30px;">{{ last48|n }}</div>
+        <div class="stat-lbl">Vues · 2 derniers jours connus</div>
+
+        <div style="display:flex;align-items:flex-end;gap:3px;height:56px;margin-top:16px;">
+          {% set bars = a.daily[-14:] %}
+          {% set bmax = (bars|map(attribute='views')|max) if bars else 0 %}
+          {% for d in bars %}
+            <span title="{{ d.date }} · {{ d.views }} vues"
+                  style="flex:1;border-radius:2px 2px 0 0;background:var(--chart);
+                         height:{{ ((d.views / bmax * 100) if bmax else 2)|round|int }}%;min-height:2px;"></span>
+          {% endfor %}
+        </div>
+        <div style="display:flex;justify-content:space-between;" class="tiny muted">
+          <span>-14 j</span><span>Dernier jour</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Contenus populaires</h2>
+        <a class="link tiny" href="{{ url_for('contenus', c=c.id, tab='posted') }}">Tout voir</a></div>
+      <div class="card-b">
+        {% if top %}
+        <table class="tbl" style="margin:-8px 0;">
+          <tbody>
+          {% for v in top %}
+          <tr>
+            <td style="padding-left:0;">
+              <div class="vrow">
+                <span class="thumb" style="width:48px;height:28px;">
+                  <img onerror="this.style.display='none'" src="https://i.ytimg.com/vi/{{ v.id }}/default.jpg" alt="" style="width:100%;height:100%;object-fit:cover;">
+                </span>
+                <a class="t" href="{{ v.url }}" target="_blank" rel="noopener" style="max-width:160px;">{{ v.title }}</a>
+              </div>
+            </td>
+            <td class="num" style="padding-right:0;">{{ v.views|n }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="tiny muted">{{ "Aucune vidéo publiée pour l'instant." if c.connected else "Connecte la chaîne pour voir tes meilleures vidéos." }}</div>
+        {% endif %}
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

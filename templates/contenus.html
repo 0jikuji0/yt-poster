@@ -1,0 +1,124 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Contenus de la chaîne</h1>
+    <div class="page-sub">{{ c.title or c.id }} · {{ c.pending }} en file d'attente · {{ c.posted }} publiée{{ 's' if c.posted > 1 }}</div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <form method="post" action="{{ url_for('post_now', name=c.id) }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <button class="btn ghost" {{ 'disabled' if not c.pending or not c.connected }}>▶ Poster la suivante</button>
+    </form>
+    <button class="btn primary" data-open-create>＋ Ajouter des vidéos</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <a class="tab {{ 'on' if tab == 'queue' }}" href="{{ url_for('contenus', c=c.id, tab='queue', q=q or None) }}">File d'attente ({{ queue|length }})</a>
+  <a class="tab {{ 'on' if tab == 'posted' }}" href="{{ url_for('contenus', c=c.id, tab='posted', q=q or None) }}">Publiées ({{ posted|length }})</a>
+</div>
+
+{% if q %}
+<div class="tiny muted" style="margin-bottom:12px;">
+  Résultats pour « {{ q }} » — <a class="link" href="{{ url_for('contenus', c=c.id, tab=tab) }}">effacer la recherche</a>
+</div>
+{% endif %}
+
+{% if tab == 'queue' %}
+  {% if queue %}
+  <form method="post" action="{{ url_for('delete_many', name=c.id) }}"
+        data-confirm="Supprimer définitivement les vidéos sélectionnées (fichier + .json) ?">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <div class="bulk" id="bulkBar">
+      <b><span id="bulkCount">0</span> sélectionnée(s)</b>
+      <button class="btn sm danger">Supprimer</button>
+      <span class="tiny muted">Les fichiers sont retirés du dossier de la chaîne.</span>
+    </div>
+    <div class="card">
+      <table class="tbl">
+        <thead><tr>
+          <th style="width:36px;"><input type="checkbox" id="checkAll"></th>
+          <th>Vidéo</th><th>Visibilité prévue</th><th>Ajoutée le</th>
+          <th class="num">Taille</th><th style="width:60px;"></th>
+        </tr></thead>
+        <tbody>
+        {% for v in queue %}
+          <tr>
+            <td><input type="checkbox" class="rowcheck" name="videos" value="{{ v.file }}"></td>
+            <td>
+              <div class="vrow">
+                <span class="thumb">▶</span>
+                <span style="min-width:0;">
+                  <span class="t">{{ v.title }}</span>
+                  <span class="d">{{ v.description[:90] or v.file }}{{ '…' if v.description|length > 90 }}</span>
+                </span>
+              </div>
+            </td>
+            <td><span class="pill">{{ {'public':'Publique','unlisted':'Non répertoriée','private':'Privée'}.get(v.privacy, v.privacy) }}</span></td>
+            <td class="muted">{{ v.added }}</td>
+            <td class="num">{{ v.size_mb }} Mo</td>
+            <td>
+              <a class="link tiny" href="{{ url_for('media', name=c.id, filename=v.file) }}" target="_blank" rel="noopener">Voir</a>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+  {% else %}
+  <div class="card"><div class="empty">
+    <div class="ic">📥</div><h3>Aucune vidéo en attente</h3>
+    <p class="tiny">Ajoute des fichiers ici, ou dépose-les en SSH dans <span class="mono">channels/{{ c.id }}/</span>.<br>
+    Une vidéo sans <span class="mono">.json</span> reçoit automatiquement les hashtags de la chaîne.</p>
+    <button class="btn primary" style="margin-top:16px;" data-open-create>Ajouter des vidéos</button>
+  </div></div>
+  {% endif %}
+
+{% else %}
+  {% if posted %}
+  <div class="card">
+    <table class="tbl">
+      <thead><tr>
+        <th>Vidéo</th><th>Publiée le</th>
+        <th class="num">Vues</th><th class="num">J'aime</th><th class="num">Commentaires</th><th style="width:90px;"></th>
+      </tr></thead>
+      <tbody>
+      {% for v in posted %}
+        <tr>
+          <td>
+            <div class="vrow">
+              <span class="thumb">
+                {% if v.video_id %}<img onerror="this.style.display='none'" src="https://i.ytimg.com/vi/{{ v.video_id }}/default.jpg" alt="" style="width:100%;height:100%;object-fit:cover;">{% else %}▶{% endif %}
+              </span>
+              <span style="min-width:0;">
+                <span class="t">{{ v.title }}</span>
+                <span class="d mono">{{ v.file }}</span>
+              </span>
+            </div>
+          </td>
+          <td class="muted">{{ v.date|frdate }}{% if v.time %} · {{ v.time }}{% endif %}</td>
+          <td class="num">{{ v.views|n }}</td>
+          <td class="num">{{ v.likes|n }}</td>
+          <td class="num">{{ v.comments|n }}</td>
+          <td>{% if v.url %}<a class="link tiny" href="{{ v.url }}" target="_blank" rel="noopener">YouTube ↗</a>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not c.connected %}
+    <div class="tiny muted" style="margin-top:12px;">Chaîne non connectée : les vues/j'aime ne peuvent pas être récupérées.</div>
+  {% elif yt and yt.error %}
+    <div class="tiny muted" style="margin-top:12px;">{{ yt.error }}</div>
+  {% endif %}
+  {% else %}
+  <div class="card"><div class="empty">
+    <div class="ic">🎬</div><h3>Aucune vidéo publiée</h3>
+    <p class="tiny">Les vidéos publiées par le planificateur apparaîtront ici.</p>
+  </div></div>
+  {% endif %}
+{% endif %}
+{% endblock %}

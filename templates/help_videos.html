@@ -1,46 +1,9 @@
-{% extends "_shell.html" %}
+{% extends "_studio.html" %}
 {% block title %}Ajouter des vidéos — clipstudio{% endblock %}
 
-{% block styles %}
-  <style>
-    .page.narrow { max-width: 880px; }
-    h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.015em; color: #f5f5f5; margin: 0; }
-    .sub { color: #8a8a8a; font-size: 14px; margin: 8px 0 26px; line-height: 1.6; }
-    .sub a { color: #ff6da3; }
-    h2 { font-size: 19px; color: #f3f3f3; font-weight: 600; margin: 34px 0 4px; }
-    h2 .ico { margin-right: 8px; }
-    .lead { color: #9a9a9a; font-size: 13.5px; margin: 0 0 14px; line-height: 1.65; }
-    .lead a { color: #ff6da3; }
-    .step { display: flex; gap: 16px; padding: 18px 0; border-top: 1px solid #1f1f1f; }
-    .step:first-of-type { border-top: none; }
-    .num { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #ff4d8d; color: #111;
-      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
-    .step h3 { margin: 3px 0 8px; font-size: 15px; color: #f3f3f3; font-weight: 600; }
-    .step p, .step li { color: #c8c8c8; font-size: 14px; line-height: 1.65; }
-    .step ul { margin: 8px 0 0; padding-left: 18px; }
-    .step a { color: #ff6da3; }
-    code { font-family: 'IBM Plex Mono'; font-size: 12.5px; background: #161616; border: 1px solid #2a2a2a;
-      padding: 2px 6px; border-radius: 5px; color: #ededed; }
-    pre { background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 10px; padding: 14px 16px;
-      overflow-x: auto; margin: 12px 0 2px; }
-    pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.6; color: #dcdcdc; }
-    .callout { background: #161616; border-left: 3px solid #ffcf5c; border-radius: 0 9px 9px 0;
-      padding: 13px 16px; margin: 12px 0 2px; font-size: 13.5px; color: #d8d8d8; line-height: 1.6; }
-    .callout.warn { border-color: #ff4d6d; }
-    .callout.ok { border-color: #2ecf76; }
-    .callout a { color: #ff6da3; }
-    .exts { font-family: 'IBM Plex Mono'; font-size: 12.5px; color: #cfcfcf; }
-    .chtitle { margin: 16px 0 0; font-size: 13.5px; color: #ededed; }
-    .chtitle b { font-family: 'IBM Plex Mono'; color: #ff6da3; }
-    table.meta { border-collapse: collapse; margin: 10px 0 2px; width: 100%; }
-    table.meta td { border-top: 1px solid #1f1f1f; padding: 9px 10px; font-size: 13.5px; color: #c8c8c8;
-      vertical-align: top; line-height: 1.55; }
-    table.meta td:first-child { white-space: nowrap; }
-  </style>
-{% endblock %}
 
 {% block main %}
-  <div class="page narrow">
+  <div class="doc">
     <h1>Ajouter des vidéos à une chaîne</h1>
     <p class="sub">Une fois une chaîne <b>connectée</b> (voir la
       <a href="{{ url_for('help_credentials') }}">doc client_secret.json</a>), il suffit de lui
@@ -54,10 +17,10 @@
     <div class="step">
       <div class="num">1</div>
       <div>
-        <h3>Ouvre la chaîne, section « Déposer des vidéos »</h3>
-        <p>Clique sur une chaîne dans la barre latérale. Sur sa page, la carte
-          <b>« Déposer des vidéos »</b> contient une zone <b>＋ Fichiers vidéo + .json</b> :
-          clique dessus pour choisir un ou plusieurs fichiers (sélection multiple possible).</p>
+        <h3>Choisis la chaîne, puis clique « Créer »</h3>
+        <p>La chaîne active se choisit avec le bouton sous son avatar, en haut de la barre latérale.
+          Ensuite, le bouton <b>＋ Créer</b> (en haut à droite) ouvre la fenêtre d'ajout : la zone
+          <b>＋ Sélectionner des fichiers vidéo (+ .json)</b> accepte plusieurs fichiers d'un coup.</p>
         <p class="exts">Formats acceptés : .mp4 · .mov · .avi · .mkv · .webm · .flv · .m4v</p>
       </div>
     </div>
@@ -89,7 +52,7 @@
     </div>
 
     <div class="callout ok">Astuce : tu peux aussi déposer des vidéos depuis la page
-      <a href="{{ url_for('library') }}">Bibliothèque</a>, qui regroupe la file de toutes les chaînes.</div>
+      <a href="{{ url_for('contenus') }}">Contenus</a>, onglet « File d'attente ».</div>
 
     <!-- ============ 2. PAIRES JSON ============ -->
     <h2><span class="ico">🏷️</span>Un titre différent par vidéo : les paires .json</h2>

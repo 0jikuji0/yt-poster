@@ -42,22 +42,35 @@ Au **premier accès**, l'interface demande de **créer un mot de passe**.
 
 ## 4. Connecter les chaînes
 
-Sur le tableau de bord, clique **« Connecter »** sur chaque chaîne, choisis le bon
-compte Google, accepte. Le token est stocké dans `tokens/token_<nom>.json`.
-Le planificateur peut alors poster sur cette chaîne.
+Sur le **Tableau de bord**, clique **« Connecter »**, choisis le bon compte Google,
+accepte. Le token est stocké dans `tokens/token_<nom>.json`. Le planificateur peut
+alors poster sur cette chaîne.
 
-## 5. Utilisation
+## 5. L'interface (façon YouTube Studio)
 
-- **Déposer des vidéos** : page d'une chaîne → « Déposer des vidéos ». Tu peux en
-  mettre plusieurs d'un coup ; renseigne titre/description/tags/confidentialité.
-  Chaque vidéo est rangée dans `channels/<nom>/` avec son JSON de métadonnées.
-- **Réglages par chaîne** : nombre de vidéos/jour, fenêtre horaire (ex. 7h–21h),
-  confidentialité par défaut, activer/désactiver la planification.
-- **Planificateur** : chaque jour, il tire au hasard N horaires dans la fenêtre et
-  poste 1 vidéo à chacun. Les prochains créneaux du jour sont affichés.
-- **Poster maintenant** : bouton pour forcer un upload immédiat (test).
-- **Journal** : les derniers événements (uploads, erreurs 403, etc.) sont visibles
-  en bas du tableau de bord et dans `logs/webapp.log`.
+L'interface travaille **sur une chaîne à la fois** : la chaîne active se choisit
+sous l'avatar, en haut de la barre latérale (le choix est mémorisé en session, et
+l'URL `?c=<nom>` fonctionne partout).
+
+| Page | Ce qu'on y fait |
+|---|---|
+| **Tableau de bord** (`/`) | dernière vidéo publiée, file d'attente, créneaux du jour, stats de la chaîne |
+| **Contenus** (`/contenus`) | file d'attente (suppression multiple) et vidéos publiées avec leurs vues |
+| **Données analytiques** (`/analytics`) | vues/abonnés par jour, comparatif 28 j, contenus populaires |
+| **Planification** (`/planification`) | cadence, fenêtre horaire, heures fixes, créneaux du jour, cadence des autres chaînes |
+| **Meilleures heures** (`/heures`) | quelles heures de publication rapportent des vues |
+| **Journal** (`/journal`) | activité du planificateur (uploads, erreurs 403…) |
+| **Toutes les chaînes** (`/chaines`) | tableau comparatif + ajout de chaîne |
+| **Paramètres** (`/parametres`) | visibilité par défaut, hashtags automatiques, `client_secret.json`, renommage |
+| **Documentation** (`/aide`) | fiches pas-à-pas |
+
+- **Ajouter des vidéos** : bouton **＋ Créer** de la barre du haut (ou `?create=1`).
+  Plusieurs fichiers d'un coup ; les paires `clip01.mp4` + `clip01.json` gardent
+  leurs métadonnées, les autres reçoivent celles du formulaire (ou les hashtags de
+  la chaîne). Tout est rangé dans `channels/<nom>/`.
+- **Poster maintenant** : force un upload immédiat (test).
+- Les anciennes URL (`/library`, `/stats`, `/logs`, `/hours`, `/channel/<nom>`)
+  redirigent vers les nouvelles pages.
 
 ## 6. Faire tourner en permanence (serveur Linux)
 

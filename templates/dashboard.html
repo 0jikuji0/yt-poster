@@ -1,0 +1,198 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Tableau de bord de la chaîne</h1>
+    <div class="page-sub">
+      {{ c.title or c.id }} ·
+      {% if c.connected %}<span class="pill ok"><span class="dot"></span>connectée</span>
+      {% else %}<span class="pill off"><span class="dot"></span>non connectée</span>{% endif %}
+      {% if c.active %}<span class="pill info">publication auto</span>
+      {% else %}<span class="pill warn">en pause</span>{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <form method="post" action="{{ url_for('post_now', name=c.id) }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <button class="btn primary" {{ 'disabled' if not c.pending or not c.connected }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        Poster maintenant
+      </button>
+    </form>
+    <a class="btn" href="{{ url_for('connect', name=c.id) }}">
+      {{ 'Reconnecter' if c.connected else 'Connecter la chaîne' }}
+    </a>
+  </div>
+</div>
+
+{% if not has_secrets %}
+<div class="banner warn">
+  <span class="ic">🔑</span>
+  <div><div class="t">Aucun fichier <span class="mono">client_secret.json</span> installé</div>
+       <div class="s">Sans lui, impossible de connecter une chaîne à YouTube.</div></div>
+  <a class="btn" href="{{ url_for('help_credentials') }}">Installer</a>
+</div>
+{% elif not c.connected %}
+<div class="banner warn">
+  <span class="ic">🔌</span>
+  <div><div class="t">« {{ c.id }} » n'est pas reliée à un compte YouTube</div>
+       <div class="s">Connecte-la pour publier automatiquement et récupérer les statistiques.</div></div>
+  <a class="btn primary" href="{{ url_for('connect', name=c.id) }}">Connecter</a>
+</div>
+{% endif %}
+
+<div class="dash">
+  {# ------------------------- colonne principale ------------------------- #}
+  <div class="grid" style="gap:24px;">
+
+    <section class="card">
+      <div class="card-h"><h2>Dernière vidéo publiée</h2>
+        <a class="link tiny" href="{{ url_for('contenus', c=c.id, tab='posted') }}">Tous les contenus</a></div>
+      <div class="card-b">
+        {% if last %}
+        <div class="lastvid">
+          <div class="th">
+            {% if last.video_id %}<img onerror="this.style.display='none'" src="https://i.ytimg.com/vi/{{ last.video_id }}/mqdefault.jpg" alt="">
+            {% else %}▶{% endif %}
+          </div>
+          <div class="meta">
+            <div class="t">{{ last.title }}</div>
+            <div class="d">Publiée le {{ last.date|frdate }}{% if last.time %} à {{ last.time }}{% endif %}</div>
+            {% if last.url %}<a class="link tiny" href="{{ last.url }}" target="_blank" rel="noopener">Voir sur YouTube ↗</a>{% endif %}
+            <div class="metrics">
+              <div class="metric"><span class="muted">Vues</span><b>{{ last.views|n }}</b></div>
+              <div class="metric"><span class="muted">J'aime</span><b>{{ last.likes|n }}</b></div>
+              <div class="metric"><span class="muted">Commentaires</span><b>{{ last.comments|n }}</b></div>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="empty">
+          <div class="ic">🎬</div><h3>Aucune vidéo publiée</h3>
+          <p class="tiny">Ajoute des vidéos à la file, le planificateur s'occupe du reste.</p>
+          <button class="btn primary" style="margin-top:14px;" data-open-create>Ajouter des vidéos</button>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>File d'attente — {{ n_queue }} vidéo{{ 's' if n_queue > 1 }}</h2>
+        <a class="link tiny" href="{{ url_for('contenus', c=c.id) }}">Gérer</a></div>
+      <div class="card-b">
+        {% if queue %}
+        <div class="qlist">
+          {% for v in queue %}
+          <div class="qrow">
+            <span class="n">{{ loop.index }}</span>
+            <span class="t">{{ v.title }}</span>
+            <span class="s">{{ v.size_mb }} Mo</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% if n_queue > queue|length %}
+        <div class="tiny muted" style="margin-top:12px;">+ {{ n_queue - queue|length }} autre(s) en attente.</div>
+        {% endif %}
+        {% else %}
+        <div class="empty" style="padding:32px 12px;">
+          <div class="ic">📥</div><h3>La file est vide</h3>
+          <p class="tiny">Dépose des vidéos ici ou envoie-les en SSH dans <span class="mono">channels/{{ c.id }}/</span>.</p>
+          <button class="btn primary" style="margin-top:14px;" data-open-create>Ajouter des vidéos</button>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Vues des 28 derniers jours</h2>
+        <a class="link tiny" href="{{ url_for('analytics', c=c.id) }}">Données analytiques</a></div>
+      <div class="card-b">
+        {% if a.daily %}
+          <div id="dashChart" data-chart='{{ a.daily|tojson }}' data-key="views" style="height:180px;"></div>
+        {% else %}
+          <div class="empty" style="padding:28px 12px;">
+            <div class="ic">📈</div>
+            <h3>Pas encore de données</h3>
+            <p class="tiny">{{ "L'API Analytics a 2 à 3 jours de décalage." if c.connected else "Connecte la chaîne pour voir ses statistiques." }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  {# ---------------------------- colonne droite ---------------------------- #}
+  <aside class="grid" style="gap:24px;">
+
+    <section class="card">
+      <div class="card-h"><h2>Statistiques de la chaîne</h2></div>
+      <div class="card-b">
+        <div class="stat-lbl">Abonnés</div>
+        <div class="stat-big">{{ a.totals.subs|n if a.totals else '—' }}</div>
+        <div class="tiny muted" style="margin-top:2px;">
+          {{ a.cur28.subs|signed }} sur les 28 derniers jours
+        </div>
+
+        <div style="height:1px;background:var(--line);margin:18px 0;"></div>
+
+        <div class="stat-lbl" style="margin-bottom:10px;">Résumé · 28 derniers jours</div>
+        <div class="metrics">
+          <div class="metric"><span class="muted">Vues</span>
+            <span><b>{{ a.cur28.views|n }}</b>
+            {% if a.views_pct is not none %}
+              <span class="tiny {{ 'up' if a.views_pct >= 0 else 'down' }}">{{ a.views_pct|signed }} %</span>
+            {% endif %}</span></div>
+          <div class="metric"><span class="muted">Abonnés</span>
+            <span><b>{{ a.cur28.subs|signed }}</b>
+            {% if a.subs_pct is not none %}
+              <span class="tiny {{ 'up' if a.subs_pct >= 0 else 'down' }}">{{ a.subs_pct|signed }} %</span>
+            {% endif %}</span></div>
+          <div class="metric"><span class="muted">Vues totales</span><b>{{ a.totals.views|n if a.totals else '—' }}</b></div>
+          <div class="metric"><span class="muted">Vidéos en ligne</span><b>{{ a.totals.videos|n if a.totals else c.posted }}</b></div>
+        </div>
+        <a class="btn ghost" style="margin-top:16px;width:100%;justify-content:center;"
+           href="{{ url_for('analytics', c=c.id) }}">Accéder aux données analytiques</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Publications du jour</h2>
+        <form method="post" action="{{ url_for('regenerate_channel_schedule', name=c.id) }}">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <button class="btn sm ghost" title="Re-tirer les horaires">↻</button>
+        </form>
+      </div>
+      <div class="card-b">
+        {% if c.slots_all %}
+          <div class="slotlist">
+            {% for s in c.slots_all %}
+              <span class="slot {{ 'past' if s not in c.slots else ('next' if s == c.slots[0] else '') }}">{{ s }}</span>
+            {% endfor %}
+          </div>
+          <div class="tiny muted" style="margin-top:12px;">
+            {{ c.slots|length }} créneau(x) restant(s) aujourd'hui · {{ c.cfg.posts_per_day }} vidéo(s)/jour
+            entre {{ '%02d'|format(c.cfg.window_start) }}h et {{ '%02d'|format(c.cfg.window_end) }}h.
+          </div>
+        {% else %}
+          <div class="tiny muted">Aucun créneau aujourd'hui — {{ 'planification en pause.' if not c.active else 'tous les créneaux sont passés.' }}</div>
+        {% endif %}
+        <a class="btn ghost" style="margin-top:16px;width:100%;justify-content:center;"
+           href="{{ url_for('planification', c=c.id) }}">Régler la planification</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Raccourcis</h2></div>
+      <div class="card-b">
+        <div class="shortcuts">
+          <a class="shortcut" href="{{ url_for('heures', c=c.id) }}"><span class="ic">📊</span> Meilleures heures de publication</a>
+          <a class="shortcut" href="{{ url_for('parametres', c=c.id) }}"><span class="ic">#️⃣</span> Hashtags automatiques</a>
+          <a class="shortcut" href="{{ url_for('journal', c=c.id) }}"><span class="ic">🗒️</span> Journal du planificateur</a>
+          <a class="shortcut" href="{{ url_for('help_videos') }}"><span class="ic">📖</span> Envoyer des vidéos en SSH</a>
+          <a class="shortcut" href="{{ url_for('chaines') }}"><span class="ic">🗂️</span> Comparer toutes les chaînes</a>
+        </div>
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

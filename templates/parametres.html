@@ -1,0 +1,140 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Paramètres</h1>
+    <div class="page-sub">Chaîne « {{ c.id }} », métadonnées automatiques et accès à l'API YouTube.</div>
+  </div>
+</div>
+
+<div class="dash">
+  <div class="grid" style="gap:24px;">
+
+    <form method="post" action="{{ url_for('channel_settings', name=c.id) }}" class="card">
+      <input type="hidden" name="section" value="meta">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <div class="card-h"><h2>Publication par défaut</h2></div>
+      <div class="card-b">
+        <div class="field" style="max-width:320px;">
+          <label>Visibilité des nouvelles vidéos</label>
+          <select class="inp" name="privacy">
+            {% for v, lb in [('public','Publique'),('unlisted','Non répertoriée'),('private','Privée')] %}
+              <option value="{{ v }}" {{ 'selected' if c.privacy == v }}>{{ lb }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="height:1px;background:var(--line);margin:22px 0;"></div>
+
+        <div style="font-size:14px;">Hashtags automatiques</div>
+        <div class="hint" style="margin-top:4px;">
+          Appliqués aux vidéos déposées sans fichier <span class="mono">.json</span> (y compris en SSH).
+          À écrire sans <span class="mono">#</span>, séparés par des virgules. <span class="mono">#Shorts</span> est ajouté tout seul.
+        </div>
+        <div class="row2" style="margin-top:16px;">
+          <div class="field"><label>Toujours inclus</label>
+            <input class="inp" type="text" name="hashtags_core" value="{{ c.cfg.hashtags_core|join(', ') }}" placeholder="ex. football, foot"></div>
+          <div class="field"><label>Nombre piochés au hasard</label>
+            <input class="inp" type="number" name="hashtags_extra" min="0" max="15" value="{{ c.cfg.hashtags_extra }}"></div>
+        </div>
+        <div class="field" style="margin-top:16px;">
+          <label>Réservoir (un mélange différent par vidéo)</label>
+          <textarea class="inp" name="hashtags_pool" rows="2" placeholder="ex. viral, sport, but, skills, goal, ligue1…">{{ c.cfg.hashtags_pool|join(', ') }}</textarea>
+        </div>
+
+        <div style="height:1px;background:var(--line);margin:22px 0;"></div>
+
+        <div style="font-size:14px;">Hashtags temporaires</div>
+        <div class="hint" style="margin-top:4px;">
+          Ajoutés aux permanents pour les prochaines vidéos seulement (utile pour un événement).
+          Le compteur baisse à chaque vidéo mise en file.
+        </div>
+        {% if c.cfg.hashtags_temp_remaining %}
+          <div class="tiny" style="color:var(--blue);margin-top:8px;">Actifs pour encore {{ c.cfg.hashtags_temp_remaining }} vidéo(s).</div>
+        {% endif %}
+        <div class="row2" style="margin-top:16px;">
+          <div class="field"><label>Hashtags temporaires</label>
+            <input class="inp" type="text" name="hashtags_temp" value="{{ c.cfg.hashtags_temp|join(', ') }}" placeholder="ex. coupedumonde, finale"></div>
+          <div class="field"><label>Pour les X prochaines vidéos</label>
+            <input class="inp" type="number" name="hashtags_temp_remaining" min="0" max="999" value="{{ c.cfg.hashtags_temp_remaining }}"></div>
+        </div>
+
+        <button class="btn primary" style="margin-top:22px;">Enregistrer</button>
+      </div>
+    </form>
+
+    <section class="card">
+      <div class="card-h"><h2>Identifiants OAuth (partagés)</h2>
+        <span class="pill {{ 'ok' if has_secrets else 'off' }}">{{ 'installé' if has_secrets else 'manquant' }}</span></div>
+      <div class="card-b">
+        <div class="hint">
+          Le fichier <span class="mono">client_secret.json</span> (type « Application Web ») est commun à toutes
+          les chaînes. L'URI de redirection à déclarer chez Google est :
+          <div class="mono tiny" style="margin-top:8px;color:var(--txt);">{{ base_url.rstrip('/') }}/oauth/callback</div>
+        </div>
+        <form method="post" action="{{ url_for('upload_credentials') }}" enctype="multipart/form-data" style="margin-top:16px;">
+          <label class="drop">
+            <span class="big">＋ Déposer client_secret.json</span>
+            <span class="sm">Envoi automatique dès la sélection</span>
+            <input type="file" name="secrets" accept=".json" data-autosubmit style="display:none">
+          </label>
+        </form>
+        <a class="btn ghost" style="margin-top:14px;" href="{{ url_for('help_credentials') }}">Comment créer ce fichier ?</a>
+      </div>
+    </section>
+  </div>
+
+  <aside class="grid" style="gap:24px;">
+    <section class="card">
+      <div class="card-h"><h2>Chaîne</h2>
+        <span class="pill {{ 'ok' if c.connected else 'off' }}"><span class="dot"></span>{{ 'connectée' if c.connected else 'non connectée' }}</span></div>
+      <div class="card-b">
+        <div class="metrics" style="margin-top:0;">
+          <div class="metric"><span class="muted">Titre YouTube</span><b>{{ c.title or '—' }}</b></div>
+          <div class="metric"><span class="muted">Vidéos publiées</span><b>{{ c.posted }}</b></div>
+          <div class="metric"><span class="muted">En file d'attente</span><b>{{ c.pending }}</b></div>
+        </div>
+        <a class="btn primary" style="margin-top:16px;width:100%;justify-content:center;"
+           href="{{ url_for('connect', name=c.id) }}">{{ 'Reconnecter' if c.connected else 'Connecter à YouTube' }}</a>
+
+        <form method="post" action="{{ url_for('rename_channel', name=c.id) }}" style="margin-top:18px;">
+          <div class="field"><label>Renommer la chaîne (dossier interne)</label>
+            <div style="display:flex;gap:8px;">
+              <input class="inp" type="text" name="new_name" value="{{ c.id }}" required>
+              <button class="btn ghost">OK</button>
+            </div></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Application</h2></div>
+      <div class="card-b">
+        <div class="metrics" style="margin-top:0;">
+          <div class="metric"><span class="muted">Adresse publique</span><b class="mono tiny">{{ base_url }}</b></div>
+          <div class="metric"><span class="muted">Fuseau horaire</span><b>{{ tz }}</b></div>
+          <div class="metric"><span class="muted">Chaînes configurées</span><b>{{ nav_channels|length }}</b></div>
+        </div>
+        <div class="hint" style="margin-top:12px;">
+          Ces valeurs se règlent dans <span class="mono">config.json</span> sur le serveur.
+        </div>
+        <a class="btn ghost" style="margin-top:14px;width:100%;justify-content:center;" href="{{ url_for('help_index') }}">Documentation</a>
+      </div>
+    </section>
+
+    <section class="card" style="border-color:#4a2a2a;">
+      <div class="card-h"><h2>Zone rouge</h2></div>
+      <div class="card-b">
+        <div class="hint">Retirer la chaîne de l'interface. Le dossier
+          <span class="mono">channels/{{ c.id }}/</span> et ses vidéos restent sur le serveur ;
+          seul le jeton OAuth est supprimé.</div>
+        <form method="post" action="{{ url_for('remove_channel', name=c.id) }}" style="margin-top:14px;"
+              data-confirm="Retirer « {{ c.id }} » de l'interface ? Les fichiers vidéo restent sur le serveur.">
+          <button class="btn danger" style="width:100%;justify-content:center;">Retirer cette chaîne</button>
+        </form>
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

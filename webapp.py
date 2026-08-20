@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover
 
 import json
 
-from flask import (Flask, abort, flash, redirect, render_template, request,
+from flask import (Flask, abort, flash, g, redirect, render_template, request,
                    send_from_directory, session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -381,24 +381,6 @@ def ensure_sidecars(name: str) -> int:
     return created
 
 
-def channel_status(name: str) -> dict:
-    """Infos affichées sur le dashboard pour une chaîne."""
-    ch = config["channels"][name]
-    folder = channel_folder(name)
-    ensure_sidecars(name)
-    state = load_state(folder / ".uploaded.json")
-    pending = find_jobs(folder, state)
-    return {
-        "name": name,
-        "cfg": ch,
-        "connected": token_path(name).exists(),
-        "pending": len(pending),
-        "posted": len(state),
-        "planned": [t.strftime("%H:%M") for t in SCHEDULE_TODAY.get(name, [])
-                    if t > datetime.now(TZ)],
-    }
-
-
 # ---------------------------------------------------------------------------
 # Planificateur
 # ---------------------------------------------------------------------------
@@ -577,29 +559,114 @@ if config["base_url"].startswith("https://"):
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
-def _nav_channels() -> list:
-    """Liste légère des chaînes pour la sidebar partagée (100 % local, sans appel API) :
-    nom, connectée (token présent), planificateur actif. Connectées d'abord."""
-    items = []
-    for name, ch in config["channels"].items():
-        items.append({
-            "id": name,
-            "connected": token_path(name).exists(),
-            "active": bool(ch.get("enabled")),
-        })
-    items.sort(key=lambda c: (c["connected"], c["active"]), reverse=True)
-    return items
+def channel_card(name: str) -> dict:
+    """Statut complet d'une chaîne pour l'UI (100 % local, aucun appel API)."""
+    ch = config["channels"].get(name, {})
+    folder = channel_folder(name)
+    ensure_sidecars(name)
+    state = load_state(folder / ".uploaded.json")
+    pending = find_jobs(folder, state)
+    now = datetime.now(TZ)
+    return {
+        "id": name,
+        "title": ch.get("title"),
+        "connected": token_path(name).exists(),
+        "active": bool(ch.get("enabled")),
+        "privacy": ch.get("privacy", "public"),
+        "pending": len(pending),
+        "pending_files": [v.name for v, _ in pending],
+        "posted": len(state),
+        "slots": [t.strftime("%H:%M") for t in SCHEDULE_TODAY.get(name, []) if t > now],
+        "slots_all": [t.strftime("%H:%M") for t in SCHEDULE_TODAY.get(name, [])],
+        "cfg": ch,
+    }
+
+
+def card(name: str) -> dict:
+    """channel_card() mis en cache pour la durée de la requête."""
+    cache = getattr(g, "_cards", None)
+    if cache is None:
+        cache = g._cards = {}
+    if name not in cache:
+        cache[name] = channel_card(name)
+    return cache[name]
+
+
+def current_channel() -> str:
+    """Chaîne « active » de l'interface : ?c=… sinon la dernière choisie, sinon la 1re."""
+    names = list(config["channels"])
+    if not names:
+        return ""
+    asked = request.args.get("c") or request.form.get("c")
+    if asked in config["channels"]:
+        session["cur_ch"] = asked
+        return asked
+    remembered = session.get("cur_ch")
+    if remembered in config["channels"]:
+        return remembered
+    return names[0]
 
 
 @app.context_processor
 def inject_nav():
-    """Rend la sidebar disponible dans tous les templates sans toucher aux render_template."""
-    return {"nav_channels": _nav_channels(), "nav_has_secrets": SECRETS_PATH.exists()}
+    """Rend la sidebar Studio disponible dans tous les templates."""
+    if not session.get("logged_in") or not config["channels"]:
+        return {}
+    cur_id = current_channel()
+    return {
+        "cur_id": cur_id,
+        "cur": card(cur_id),
+        "nav_channels": [card(n) for n in config["channels"]],
+        "nav_has_secrets": SECRETS_PATH.exists(),
+        "tz": config["timezone"],
+    }
+
+
+@app.template_filter("n")
+def fmt_number(v):
+    """1234567 → « 1 234 567 » (— si inconnu)."""
+    if v is None or v == "":
+        return "—"
+    try:
+        return f"{int(v):,}".replace(",", "\u202f")
+    except (TypeError, ValueError):
+        return str(v)
+
+
+@app.template_filter("signed")
+def fmt_signed(v):
+    if v is None:
+        return "—"
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return str(v)
+    return ("+" if v >= 0 else "") + f"{v:,}".replace(",", "\u202f")
+
+
+@app.template_filter("frdate")
+def fmt_frdate(v):
+    """« 2026-08-19 » → « 19 août 2026 »."""
+    MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.",
+            "août", "sept.", "oct.", "nov.", "déc."]
+    try:
+        d = datetime.fromisoformat(str(v)[:10])
+    except (TypeError, ValueError):
+        return v or "—"
+    return f"{d.day} {MOIS[d.month - 1]} {d.year}"
+
+
+def back(endpoint: str = "dashboard", **values):
+    """Redirige vers la page d'où vient l'action (champ « next »), sinon endpoint."""
+    nxt = request.form.get("next")
+    if nxt and nxt.startswith("/"):
+        return redirect(nxt)
+    return redirect(url_for(endpoint, **values))
 
 
 def dated_url_for(endpoint, **values):
     """Comme url_for, mais ajoute ?v=<mtime> aux fichiers statiques pour casser le
-    cache navigateur après un déploiement (app.css / app.js gardent le même nom)."""
+    cache navigateur après un déploiement (studio.css / studio.js gardent le même nom)."""
     if endpoint == "static" and values.get("filename"):
         fpath = os.path.join(app.static_folder, values["filename"])
         try:
@@ -1018,130 +1085,244 @@ def _hours_analysis_fallback(name, ch, ws, we, out):
     return out
 
 
-def build_spa_data() -> list:
-    """Données injectées dans la SPA (front « clipstudio ») : une entrée par chaîne
-    avec stats par jour (Analytics), totaux, réglages, créneaux du jour et statut."""
-    now = datetime.now(TZ)
-    chans = []
-    for name, ch in config["channels"].items():
-        folder = channel_folder(name)
-        ensure_sidecars(name)
-        state = load_state(folder / ".uploaded.json")
-        connected = token_path(name).exists()
-        totals = fetch_channel_totals(name) if connected else None
-        daily = (fetch_analytics_daily(name) if connected else None) or []
-        ft = list(ch.get("fixed_times", []))
-        fu = ch.get("fixed_until")
-        fixed_dur = "permanent"
-        if ft and fu:
-            try:
-                rem = (datetime.fromisoformat(fu).date() - now.date()).days + 1
-                fixed_dur = str(rem) if rem in (1, 2, 3, 7, 14) else "permanent"
-            except (ValueError, TypeError):
-                fixed_dur = "permanent"
-        chans.append({
-            "id": name,
-            "connected": connected,
-            "status": "connectée" if connected else "non connectée",
-            "ytTitle": ch.get("title") or "—",
-            "daily": daily,            # [{date, views (jour), subs (Δ jour)}]
-            "totals": totals,          # {subs, views, videos} ou None
-            "hours": compute_best_hours(name) if connected else None,  # analyse heures
-            "settings": {
-                "active": bool(ch.get("enabled")),
-                "perDay": int(ch.get("posts_per_day", 0)),
-                "start": int(ch.get("window_start", 0)),
-                "end": int(ch.get("window_end", 0)),
-                "privacy": ch.get("privacy", "public"),
-                "hashtagsCore": ch.get("hashtags_core", []),
-                "hashtagsPool": ch.get("hashtags_pool", []),
-                "hashtagsExtra": int(ch.get("hashtags_extra", 4)),
-                "hashtagsTemp": ch.get("hashtags_temp", []),
-                "hashtagsTempRemaining": int(ch.get("hashtags_temp_remaining", 0) or 0),
-                "fixedTimes": ft,            # ["HH:MM", ...] ou []
-                "fixedUntil": fu,            # "YYYY-MM-DD" (temporaire) ou None (permanent)
-                "fixedDuration": fixed_dur,  # "permanent" | "1" | "2" | "3" | "7" | "14"
-            },
-            "slots": [t.strftime("%H:%M") for t in SCHEDULE_TODAY.get(name, []) if t > now],
-            "pending": len(find_jobs(folder, state)),
-            "posted": len(state),
+# ---------------------------------------------------------------------------
+# Pages de l'interface (style « YouTube Studio »)
+# ---------------------------------------------------------------------------
+def window_sum(daily, days, offset=0):
+    """Somme vues/abonnés sur une fenêtre glissante. offset=1 → période précédente."""
+    if not daily:
+        return {"views": 0, "subs": 0, "days": 0}
+    end = len(daily) - offset * days
+    start = max(0, end - days)
+    part = daily[max(0, start):max(0, end)]
+    return {"views": sum(d["views"] for d in part),
+            "subs": sum(d["subs"] for d in part), "days": len(part)}
+
+
+def pct_change(cur_v, prev_v):
+    """Variation en % entre deux périodes (None si la précédente est vide)."""
+    if not prev_v:
+        return None
+    return round((cur_v - prev_v) / prev_v * 100)
+
+
+def posted_videos(name: str, yt=None) -> list:
+    """Vidéos publiées (état local) enrichies des stats YouTube si disponibles."""
+    state = load_state(channel_folder(name) / ".uploaded.json")
+    by_id = {v["id"]: v for v in (yt or {}).get("videos", [])} if yt else {}
+    out = []
+    for fname, info in state.items():
+        st = by_id.get(info.get("video_id"), {})
+        ts = info.get("uploaded_at") or ""
+        out.append({
+            "file": fname,
+            "title": info.get("title") or Path(fname).stem,
+            "video_id": info.get("video_id"),
+            "url": info.get("url"),
+            "date": ts[:10], "time": ts[11:16], "ts": ts,
+            "views": st.get("views"), "likes": st.get("likes"),
+            "comments": st.get("comments"),
         })
-    return chans
+    out.sort(key=lambda v: v["ts"], reverse=True)
+    return out
+
+
+def queued_videos(name: str) -> list:
+    """Vidéos en file d'attente (fichier + métadonnées du .json)."""
+    ensure_sidecars(name)
+    folder = channel_folder(name)
+    state = load_state(folder / ".uploaded.json")
+    out = []
+    for video, sidecar in find_jobs(folder, state):
+        meta = {}
+        try:
+            meta = json.loads(sidecar.read_text())
+        except Exception:
+            pass
+        stat = video.stat()
+        out.append({
+            "file": video.name,
+            "title": meta.get("title") or video.stem,
+            "description": meta.get("description", ""),
+            "tags": meta.get("tags", []),
+            "privacy": meta.get("privacy", "public"),
+            "size_mb": round(stat.st_size / 1024 / 1024, 1),
+            "added": datetime.fromtimestamp(stat.st_mtime, TZ).strftime("%d/%m/%Y"),
+        })
+    return out
+
+
+def analytics_payload(name: str, c: dict, force: bool = False) -> dict:
+    """Données chiffrées d'une chaîne : totaux, séries par jour, comparatifs."""
+    totals = fetch_channel_totals(name, force) if c["connected"] else None
+    daily = (fetch_analytics_daily(name, force) if c["connected"] else None) or []
+    cur28 = window_sum(daily, 28)
+    prev28 = window_sum(daily, 28, offset=1)
+    return {
+        "totals": totals,
+        "daily": daily,
+        "cur28": cur28,
+        "prev28": prev28,
+        "views_pct": pct_change(cur28["views"], prev28["views"]),
+        "subs_pct": pct_change(cur28["subs"], prev28["subs"]),
+        "error": _ANALYTICS_ERR.get(name),
+    }
 
 
 @app.route("/")
 @login_required
 def dashboard():
-    return render_template("app.html", channels=build_spa_data(),
-                           initial_view="global", has_secrets=SECRETS_PATH.exists())
+    if not config["channels"]:
+        return redirect(url_for("chaines"))
+    name = current_channel()
+    c = card(name)
+    a = analytics_payload(name, c)
+    yt = fetch_youtube_stats(name) if c["connected"] else None
+    posted = posted_videos(name, yt)
+    queue = queued_videos(name)
+    return render_template("dashboard.html", page="dashboard", page_name="Tableau de bord",
+                           c=c, a=a, yt=yt, last=(posted[0] if posted else None),
+                           posted=posted[:5], queue=queue[:5],
+                           n_queue=len(queue), has_secrets=SECRETS_PATH.exists())
+
+
+@app.route("/contenus")
+@login_required
+def contenus():
+    """Table des vidéos : file d'attente + publiées (façon onglets Studio)."""
+    name = current_channel()
+    c = card(name)
+    tab = request.args.get("tab") or "queue"
+    if tab not in ("queue", "posted"):
+        tab = "queue"
+    q = (request.args.get("q") or "").strip().lower()
+    yt = fetch_youtube_stats(name) if (c["connected"] and tab == "posted") else None
+    queue = queued_videos(name)
+    posted = posted_videos(name, yt)
+    if q:
+        queue = [v for v in queue if q in v["title"].lower() or q in v["file"].lower()]
+        posted = [v for v in posted if q in v["title"].lower() or q in v["file"].lower()]
+        tab = "posted" if (not queue and posted) else tab
+    return render_template("contenus.html", page="contenus", page_name="Contenus",
+                           c=c, tab=tab, q=q, queue=queue, posted=posted, yt=yt)
+
+
+@app.route("/analytics")
+@login_required
+def analytics():
+    name = current_channel()
+    c = card(name)
+    a = analytics_payload(name, c, force=request.args.get("refresh") == "1")
+    yt = fetch_youtube_stats(name, force=request.args.get("refresh") == "1") if c["connected"] else None
+    return render_template("analytics.html", page="analytics",
+                           page_name="Données analytiques", c=c, a=a, yt=yt,
+                           top=(yt or {}).get("videos", [])[:5])
+
+
+@app.route("/planification")
+@login_required
+def planification():
+    name = current_channel()
+    c = card(name)
+    ch = c["cfg"]
+    fixed = list(ch.get("fixed_times", []))
+    until = ch.get("fixed_until")
+    dur = "permanent"
+    if fixed and until:
+        try:
+            rem = (datetime.fromisoformat(until).date() - datetime.now(TZ).date()).days + 1
+            dur = str(rem) if rem in (1, 2, 3, 7, 14) else "permanent"
+        except (ValueError, TypeError):
+            dur = "permanent"
+    others = [card(n) for n in config["channels"] if n != name]
+    return render_template("planification.html", page="planification",
+                           page_name="Planification", c=c, fixed=fixed,
+                           fixed_until=until, fixed_duration=dur, others=others,
+                           n_queue=c["pending"])
+
+
+@app.route("/heures")
+@login_required
+def heures():
+    """Analyse : quelles heures de publication rapportent le plus de vues."""
+    name = current_channel()
+    c = card(name)
+    try:
+        days = max(1, min(60, int(request.args.get("days", EARLY_MIN_AGE_DAYS))))
+    except (TypeError, ValueError):
+        days = EARLY_MIN_AGE_DAYS
+    analysis = build_hours_analysis(name, min_age_days=days) if name else None
+    return render_template("heures.html", page="heures", page_name="Meilleures heures",
+                           c=c, analysis=analysis, days=days, age_presets=[1, 4, 7, 14, 30])
+
+
+@app.route("/journal")
+@login_required
+def journal():
+    """Journal du planificateur, filtrable sur la chaîne courante."""
+    name = current_channel()
+    scope = request.args.get("scope") or "channel"
+    lines = list(LOG_BUFFER)
+    if scope == "channel" and name:
+        lines = [ln for ln in lines if name in ln]
+    return render_template("journal.html", page="journal", page_name="Journal",
+                           c=card(name), lines=lines[:400], scope=scope)
+
+
+@app.route("/parametres")
+@login_required
+def parametres():
+    name = current_channel()
+    return render_template("parametres.html", page="parametres", page_name="Paramètres",
+                           c=card(name), has_secrets=SECRETS_PATH.exists(),
+                           base_url=config["base_url"], tz=config["timezone"])
+
+
+@app.route("/chaines")
+@login_required
+def chaines():
+    """Vue « toutes les chaînes » : cumul et comparatif."""
+    cards = [card(n) for n in config["channels"]]
+    rows, tot = [], {"views": 0, "subs": 0, "videos": 0, "pending": 0, "posted": 0}
+    for c in cards:
+        totals = fetch_channel_totals(c["id"]) if c["connected"] else None
+        daily = (fetch_analytics_daily(c["id"]) if c["connected"] else None) or []
+        w = window_sum(daily, 28)
+        rows.append({"c": c, "totals": totals, "w28": w})
+        tot["pending"] += c["pending"]
+        tot["posted"] += c["posted"]
+        if totals:
+            tot["views"] += totals["views"]
+            tot["subs"] += totals["subs"]
+            tot["videos"] += totals["videos"]
+    return render_template("chaines.html", page="chaines", page_name="Toutes les chaînes",
+                           rows=rows, tot=tot, has_secrets=SECRETS_PATH.exists())
+
+
+# --- Anciennes URL : on redirige vers les nouvelles pages ---
+@app.route("/library")
+@login_required
+def library():
+    return redirect(url_for("contenus", c=request.args.get("channel") or current_channel()))
 
 
 @app.route("/stats")
 @login_required
 def stats():
-    """Stats globales + détail filtrable par chaîne."""
-    channels = [channel_status(n) for n in config["channels"]]
-    totals = {
-        "total_posted": sum(c["posted"] for c in channels),
-        "total_pending": sum(c["pending"] for c in channels),
-        "n_channels": len(channels),
-        "n_connected": sum(1 for c in channels if c["connected"]),
-        "max_posted": max((c["posted"] for c in channels), default=0),
-    }
-    sel = request.args.get("channel") or ""
-    if sel not in config["channels"]:
-        sel = ""
-    detail = None
-    if sel:
-        ch = config["channels"][sel]
-        views = sorted(ch.get("views", []), key=lambda e: e["date"])
-        rows, prev = [], None
-        for e in views:
-            delta = None if prev is None else int(e["views"]) - prev
-            rows.append({"date": e["date"], "views": int(e["views"]), "delta": delta})
-            prev = int(e["views"])
-        detail = {
-            "name": sel, "cfg": ch,
-            "st": next((c for c in channels if c["name"] == sel), None),
-            "views": list(reversed(rows)),
-            "spark": views_sparkline(views),
-            "yt": fetch_youtube_stats(sel, force=request.args.get("refresh") == "1"),
-        }
-    return render_template("stats.html", channels=channels, stats=totals,
-                           sel=sel, detail=detail)
+    return redirect(url_for("analytics", c=request.args.get("channel") or current_channel()))
 
 
 @app.route("/logs")
 @login_required
 def logs_page():
-    """Journal récent, filtrable par chaîne (lignes contenant son nom)."""
-    sel = request.args.get("channel") or ""
-    if sel not in config["channels"]:
-        sel = ""
-    lines = list(LOG_BUFFER)
-    if sel:
-        lines = [ln for ln in lines if sel in ln]
-    return render_template("logs.html", lines=lines[:300],
-                           names=list(config["channels"]), sel=sel)
+    return redirect(url_for("journal", c=request.args.get("channel") or current_channel()))
 
 
 @app.route("/hours")
 @login_required
 def hours_page():
-    """Analyse des heures de poste par chaîne : quelles heures rapportent des vues,
-    et lesquelles sont « nulles » (postées mais sans audience) → à bloquer."""
-    names = list(config["channels"])
-    sel = request.args.get("channel") or (names[0] if names else "")
-    if sel not in config["channels"]:
-        sel = names[0] if names else ""
-    try:
-        days = max(1, min(60, int(request.args.get("days", EARLY_MIN_AGE_DAYS))))
-    except (TypeError, ValueError):
-        days = EARLY_MIN_AGE_DAYS
-    analysis = build_hours_analysis(sel, min_age_days=days) if sel else None
-    titles = {n: config["channels"][n].get("title") for n in names}
-    return render_template("hours.html", names=names, sel=sel, analysis=analysis,
-                           titles=titles, days=days, age_presets=[1, 4, 7, 14, 30])
+    return redirect(url_for("heures", c=request.args.get("channel") or current_channel(),
+                            days=request.args.get("days", EARLY_MIN_AGE_DAYS)))
 
 
 @app.route("/aide/client-secret")
@@ -1182,82 +1363,77 @@ def help_stats():
                            EARLY_MIN_AGE_DAYS=EARLY_MIN_AGE_DAYS)
 
 
-def views_sparkline(views, w=600, h=140, pad=14):
-    """Construit les données d'un mini-graphe SVG à partir des relevés de vues."""
-    vals = [int(e["views"]) for e in views]
-    if len(vals) < 2:
-        return None
-    vmin, vmax = min(vals), max(vals)
-    span = (vmax - vmin) or 1
-    n = len(vals)
-    pts = []
-    for i, v in enumerate(vals):
-        x = pad + (w - 2 * pad) * (i / (n - 1))
-        y = h - pad - (h - 2 * pad) * ((v - vmin) / span)
-        pts.append(f"{x:.1f},{y:.1f}")
-    return {"points": " ".join(pts), "w": w, "h": h, "vmin": vmin, "vmax": vmax}
-
-
 @app.route("/channel/<name>")
 @login_required
 def channel(name):
+    """Ancienne URL de la SPA : sélectionne la chaîne et ouvre son tableau de bord."""
     if name not in config["channels"]:
         abort(404)
-    return render_template("app.html", channels=build_spa_data(),
-                           initial_view=name, has_secrets=SECRETS_PATH.exists())
+    return redirect(url_for("dashboard", c=name))
 
 
 @app.route("/channel/<name>/settings", methods=["POST"])
 @login_required
 def channel_settings(name):
+    """Enregistre les réglages d'une chaîne. Le champ caché « section » dit quelle
+    partie du formulaire est envoyée (planification ou métadonnées), pour ne jamais
+    écraser les réglages absents du formulaire."""
     if name not in config["channels"]:
         abort(404)
     ch = config["channels"][name]
-    ch["enabled"] = request.form.get("enabled") == "on"
-    ch["posts_per_day"] = max(0, int(request.form.get("posts_per_day", ch["posts_per_day"])))
-    ch["window_start"] = min(23, max(0, int(request.form.get("window_start", ch["window_start"]))))
-    ch["window_end"] = min(24, max(0, int(request.form.get("window_end", ch["window_end"]))))
-    ch["privacy"] = request.form.get("privacy", ch["privacy"])
-    # Réservoir de hashtags : « toujours inclus » + tirage aléatoire par vidéo.
-    ch["hashtags_core"] = parse_hashtags(request.form.get("hashtags_core", ""))
-    ch["hashtags_pool"] = parse_hashtags(request.form.get("hashtags_pool", ""))
-    try:
-        ch["hashtags_extra"] = max(0, min(15, int(request.form.get("hashtags_extra",
-                                                                    ch.get("hashtags_extra", 4)))))
-    except (TypeError, ValueError):
-        pass
-    # Hashtags temporaires : ajoutés aux permanents pour les X prochaines vidéos.
-    # Enregistrer (ré)initialise la fenêtre au compteur saisi.
-    ch["hashtags_temp"] = parse_hashtags(request.form.get("hashtags_temp", ""))
-    try:
-        n = max(0, min(999, int(request.form.get("hashtags_temp_remaining", 0))))
-    except (TypeError, ValueError):
-        n = 0
-    ch["hashtags_temp_remaining"] = n if ch["hashtags_temp"] else 0
-    # Heures fixes saisies à la main (HH:MM séparées par virgule/espace). Vide = aléatoire.
-    fixed = parse_fixed_times(request.form.get("fixed_times", ""))
-    ch["fixed_times"] = ["%02d:%02d" % (h, m) for h, m in fixed]
-    # Durée : "permanent" (jusqu'à changement) ou un nombre de jours (1 = aujourd'hui).
-    dur = request.form.get("fixed_duration", "permanent")
-    if not ch["fixed_times"] or dur == "permanent":
-        ch["fixed_until"] = None
-    else:
+    section = request.form.get("section", "all")
+    msg = "Réglages enregistrés."
+
+    if section in ("all", "schedule"):
+        ch["enabled"] = request.form.get("enabled") == "on"
+        ch["posts_per_day"] = max(0, int(request.form.get("posts_per_day", ch["posts_per_day"])))
+        ch["window_start"] = min(23, max(0, int(request.form.get("window_start", ch["window_start"]))))
+        ch["window_end"] = min(24, max(0, int(request.form.get("window_end", ch["window_end"]))))
+        # Heures fixes saisies à la main (HH:MM séparées par virgule/espace). Vide = aléatoire.
+        fixed = parse_fixed_times(request.form.get("fixed_times", ""))
+        ch["fixed_times"] = ["%02d:%02d" % (h, m) for h, m in fixed]
+        # Durée : "permanent" (jusqu'à changement) ou un nombre de jours (1 = aujourd'hui).
+        dur = request.form.get("fixed_duration", "permanent")
+        if not ch["fixed_times"] or dur == "permanent":
+            ch["fixed_until"] = None
+        else:
+            try:
+                n = max(1, int(dur))
+            except ValueError:
+                n = 1
+            ch["fixed_until"] = (datetime.now(TZ).date() + timedelta(days=n - 1)).isoformat()
+        if not ch["fixed_times"]:
+            msg = "Planification enregistrée — heures aléatoires dans la fenêtre."
+        elif ch["fixed_until"]:
+            msg = ("Planification enregistrée — heures fixes %s jusqu'au %s inclus."
+                   % (", ".join(ch["fixed_times"]), ch["fixed_until"]))
+        else:
+            msg = "Planification enregistrée — heures fixes : " + ", ".join(ch["fixed_times"])
+
+    if section in ("all", "meta"):
+        ch["privacy"] = request.form.get("privacy", ch["privacy"])
+        # Réservoir de hashtags : « toujours inclus » + tirage aléatoire par vidéo.
+        ch["hashtags_core"] = parse_hashtags(request.form.get("hashtags_core", ""))
+        ch["hashtags_pool"] = parse_hashtags(request.form.get("hashtags_pool", ""))
         try:
-            n = max(1, int(dur))
-        except ValueError:
-            n = 1
-        ch["fixed_until"] = (datetime.now(TZ).date() + timedelta(days=n - 1)).isoformat()
+            ch["hashtags_extra"] = max(0, min(15, int(request.form.get(
+                "hashtags_extra", ch.get("hashtags_extra", 4)))))
+        except (TypeError, ValueError):
+            pass
+        # Hashtags temporaires : ajoutés aux permanents pour les X prochaines vidéos.
+        ch["hashtags_temp"] = parse_hashtags(request.form.get("hashtags_temp", ""))
+        try:
+            n = max(0, min(999, int(request.form.get("hashtags_temp_remaining", 0))))
+        except (TypeError, ValueError):
+            n = 0
+        ch["hashtags_temp_remaining"] = n if ch["hashtags_temp"] else 0
+        if section == "meta":
+            msg = "Paramètres de publication enregistrés."
+
     save_config()
     plan_day()  # les changements prennent effet immédiatement
-    if not ch["fixed_times"]:
-        flash("Réglages enregistrés — heures aléatoires dans la fenêtre.", "ok")
-    elif ch["fixed_until"]:
-        flash("Réglages enregistrés — heures fixes %s jusqu'au %s inclus."
-              % (", ".join(ch["fixed_times"]), ch["fixed_until"]), "ok")
-    else:
-        flash("Réglages enregistrés — heures fixes permanentes : "
-              + ", ".join(ch["fixed_times"]), "ok")
-    return redirect(url_for("channel", name=name))
+    flash(msg, "ok")
+    return back("dashboard", c=name)
 
 
 def _read_json_text(fstorage):
@@ -1279,7 +1455,7 @@ def upload(name):
     files = [f for f in request.files.getlist("videos") if f and f.filename]
     if not files:
         flash("Aucun fichier sélectionné.", "error")
-        return redirect(url_for("channel", name=name))
+        return back("dashboard", c=name)
 
     # Métadonnées du formulaire — utilisées seulement pour les vidéos SANS JSON fourni.
     tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
@@ -1363,8 +1539,8 @@ def upload(name):
               + ("…" if len(ignored) > 5 else ""), "error")
 
     if request.form.get("next") == "library":
-        return redirect(url_for("library", channel=name))
-    return redirect(url_for("channel", name=name))
+        return back("contenus", c=name)
+    return back("dashboard", c=name)
 
 
 @app.route("/channel/<name>/delete", methods=["POST"])
@@ -1381,7 +1557,28 @@ def delete_pending(name):
         if sidecar.exists():
             sidecar.unlink()
         flash(f"Supprimé : {target}", "ok")
-    return redirect(url_for("channel", name=name))
+    return back("dashboard", c=name)
+
+
+@app.route("/channel/<name>/delete-many", methods=["POST"])
+@login_required
+def delete_many(name):
+    """Supprime plusieurs vidéos en attente (sélection dans la page Contenus)."""
+    if name not in config["channels"]:
+        abort(404)
+    folder = channel_folder(name)
+    n = 0
+    for target in request.form.getlist("videos"):
+        video = folder / secure_filename(target)
+        if video.exists() and video.suffix.lower() in VIDEO_EXTS:
+            video.unlink()
+            sidecar = video.with_suffix(".json")
+            if sidecar.exists():
+                sidecar.unlink()
+            n += 1
+    flash(f"{n} vidéo(s) supprimée(s)." if n else "Aucune vidéo sélectionnée.",
+          "ok" if n else "error")
+    return back("contenus", c=name)
 
 
 @app.route("/channel/<name>/post-now", methods=["POST"])
@@ -1392,7 +1589,7 @@ def post_now(name):
     # Lance l'upload en tâche de fond pour ne pas bloquer la page.
     scheduler.add_job(post_one, args=[name], misfire_grace_time=60)
     flash("Upload lancé en arrière-plan — voir les logs.", "ok")
-    return redirect(url_for("channel", name=name))
+    return back("dashboard", c=name)
 
 
 @app.route("/schedule/regenerate", methods=["POST"])
@@ -1434,46 +1631,10 @@ def regenerate_channel_schedule(name):
     now = datetime.now(TZ)
     remaining = len([t for t in SCHEDULE_TODAY.get(name, []) if t > now])
     flash(f"Horaires régénérés pour cette chaîne — {remaining} créneau(x) restant(s) aujourd'hui.", "ok")
-    return redirect(url_for("channel", name=name))
+    return back("dashboard", c=name)
 
 
-# --- Bibliothèque (vue galerie « façon Drive ») ---
-@app.route("/library")
-@login_required
-def library():
-    names = list(config["channels"])
-    sel = request.args.get("channel") or (names[0] if names else None)
-    items, total_mb = [], 0.0
-    if sel and sel in config["channels"]:
-        ensure_sidecars(sel)
-        folder = channel_folder(sel)
-        state = load_state(folder / ".uploaded.json")
-        for video, sidecar in find_jobs(folder, state):
-            meta = {}
-            try:
-                meta = json.loads(sidecar.read_text())
-            except Exception:
-                pass
-            size_mb = video.stat().st_size / 1024 / 1024
-            total_mb += size_mb
-            items.append({
-                "file": video.name,
-                "title": meta.get("title") or video.stem,
-                "size_mb": round(size_mb, 1),
-            })
-    # Compteurs des autres chaînes pour les onglets.
-    counts = {}
-    for n in names:
-        ensure_sidecars(n)
-        f = channel_folder(n)
-        counts[n] = len(find_jobs(f, load_state(f / ".uploaded.json")))
-    titles = {n: config["channels"][n].get("title") for n in names}
-    return render_template("library.html", names=names, sel=sel, items=items,
-                           counts=counts, titles=titles, total=len(items),
-                           total_mb=round(total_mb, 1),
-                           ch=config["channels"].get(sel))
-
-
+# --- Média : sert un fichier vidéo pour l'aperçu dans « Contenus » ---
 @app.route("/channel/<name>/media/<path:filename>")
 @login_required
 def media(name, filename):
@@ -1499,6 +1660,7 @@ def add_channel():
         save_config()
         plan_day()
         flash(f"Chaîne « {name} » ajoutée.", "ok")
+        return redirect(url_for("dashboard", c=name))
     return redirect(url_for("dashboard"))
 
 
@@ -1508,15 +1670,15 @@ def rename_channel(name):
     if name not in config["channels"]:
         abort(404)
     new = secure_filename(request.form.get("new_name", "").strip())
-    back = url_for("channel", name=name)
+    here = url_for("parametres", c=name)
     if not new:
         flash("Nom invalide.", "error")
-        return redirect(back)
+        return redirect(here)
     if new == name:
-        return redirect(back)
+        return redirect(here)
     if new in config["channels"]:
         flash("Une chaîne porte déjà ce nom.", "error")
-        return redirect(back)
+        return redirect(here)
     # Déplace le dossier des vidéos et le token associés.
     old_folder = CHANNELS_DIR / name
     if old_folder.exists():
@@ -1527,34 +1689,58 @@ def rename_channel(name):
     config["channels"][new] = config["channels"].pop(name)
     save_config()
     plan_day()
+    session["cur_ch"] = new
     flash(f"Chaîne renommée en « {new} ».", "ok")
-    return redirect(url_for("channel", name=new))
+    return redirect(url_for("parametres", c=new))
+
+
+@app.route("/channel/<name>/remove", methods=["POST"])
+@login_required
+def remove_channel(name):
+    """Retire la chaîne de l'interface : config + jeton OAuth. Les vidéos déjà
+    déposées restent sur le disque (channels/<nom>/), rien n'est effacé."""
+    if name not in config["channels"]:
+        abort(404)
+    if len(config["channels"]) <= 1:
+        flash("Impossible de retirer la dernière chaîne — ajoutes-en une autre d'abord.", "error")
+        return redirect(url_for("parametres", c=name))
+    config["channels"].pop(name)
+    tok = token_path(name)
+    if tok.exists():
+        tok.unlink()
+    SCHEDULE_TODAY.pop(name, None)
+    save_config()
+    plan_day()
+    if session.get("cur_ch") == name:
+        session.pop("cur_ch", None)
+    flash(f"Chaîne « {name} » retirée — ses fichiers sont conservés sur le serveur.", "ok")
+    return redirect(url_for("chaines"))
 
 
 # --- Identifiants OAuth (client_secret.json), partagés entre les chaînes ---
 @app.route("/credentials/upload", methods=["POST"])
 @login_required
 def upload_credentials():
-    back = request.referrer or url_for("dashboard")
+    back_url = request.referrer or url_for("dashboard")
     f = request.files.get("secrets")
     if not f or f.filename == "":
         flash("Aucun fichier sélectionné.", "error")
-        return redirect(back)
+        return redirect(back_url)
     try:
         data = json.loads(f.read().decode("utf-8"))
     except Exception:
         flash("Fichier JSON invalide.", "error")
-        return redirect(back)
+        return redirect(back_url)
     if "web" not in data and "installed" not in data:
         flash("Ce JSON n'est pas un identifiant OAuth Google (clé « web » ou « installed » absente).", "error")
-        return redirect(back)
+        return redirect(back_url)
     SECRETS_PATH.write_text(json.dumps(data, ensure_ascii=False))
     if "web" not in data:
         flash("Enregistré, MAIS c'est un client « Application de bureau ». Pour le bouton "
               "« Connecter », il faut un client « Application Web ». (Voir WEB.md)", "error")
     else:
         flash("Identifiants OAuth enregistrés ✓", "ok")
-    return redirect(back)
+    return redirect(back_url)
 
 
 # --- Suivi manuel des vues ---
@@ -1563,17 +1749,17 @@ def upload_credentials():
 def add_views(name):
     if name not in config["channels"]:
         abort(404)
-    back = url_for("channel", name=name)
+    back_url = request.form.get("next") or url_for("analytics", c=name)
     date = request.form.get("date", "").strip()
     raw = request.form.get("views", "").replace(" ", "").replace(",", "")
     if not date:
         flash("Date manquante.", "error")
-        return redirect(back)
+        return redirect(back_url)
     try:
         views = int(raw)
     except ValueError:
         flash("Nombre de vues invalide.", "error")
-        return redirect(back)
+        return redirect(back_url)
     # Abonnés : optionnel. Si vide, on reprend la dernière valeur connue.
     raw_subs = request.form.get("subs", "").replace(" ", "").replace(",", "")
     lst = [e for e in config["channels"][name].get("views", []) if e.get("date") != date]
@@ -1587,7 +1773,7 @@ def add_views(name):
     config["channels"][name]["views"] = lst
     save_config()
     flash("Relevé enregistré.", "ok")
-    return redirect(back)
+    return redirect(back_url)
 
 
 @app.route("/channel/<name>/sync", methods=["POST"])
@@ -1596,16 +1782,16 @@ def sync_views(name):
     """Force la récupération des stats YouTube et enregistre le relevé du jour."""
     if name not in config["channels"]:
         abort(404)
-    back = url_for("channel", name=name)
+    back_url = request.form.get("next") or url_for("analytics", c=name)
     if not token_path(name).exists():
         flash("Chaîne non connectée — clique « Reconnecter » d'abord.", "error")
-        return redirect(back)
+        return redirect(back_url)
     totals = fetch_channel_totals(name, force=True)
     daily = fetch_analytics_daily(name, force=True)
     fetch_video_early_views(name, force=True)  # rafraîchit l'analyse des heures de poste
     if totals is None:
         flash("Lecture impossible — reconnecte la chaîne pour autoriser l'accès aux stats.", "error")
-        return redirect(back)
+        return redirect(back_url)
     if daily is None:
         err = _ANALYTICS_ERR.get(name, "")
         low = err.lower()
@@ -1620,10 +1806,10 @@ def sync_views(name):
         else:
             flash("Stats par jour indisponibles. Détail API : "
                   + (err[:300] or "erreur inconnue"), "error")
-        return redirect(back)
+        return redirect(back_url)
     flash(f"Synchronisé ✓ {totals['subs']} abonnés · {totals['views']} vues · "
           f"{len(daily)} jour(s) de données.", "ok")
-    return redirect(back)
+    return redirect(back_url)
 
 
 @app.route("/channel/<name>/views/delete", methods=["POST"])
@@ -1636,7 +1822,7 @@ def delete_views(name):
         e for e in config["channels"][name].get("views", []) if e.get("date") != date]
     save_config()
     flash("Relevé supprimé.", "ok")
-    return redirect(url_for("channel", name=name))
+    return back("dashboard", c=name)
 
 
 # --- OAuth web ---
@@ -1684,8 +1870,9 @@ def oauth_callback():
     creds = flow.credentials
     token_path(name).write_text(creds.to_json())
     title = fetch_channel_title(name)
+    session["cur_ch"] = name
     flash(f"Chaîne « {title or name} » connectée ✓", "ok")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard", c=name))
 
 
 def main():

@@ -1,0 +1,132 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Meilleures heures de publication</h1>
+    <div class="page-sub">Quelles heures rapportent des vues sur « {{ c.id }} » — et lesquelles n'en rapportent aucune.</div>
+  </div>
+  <div class="seg" title="Âge minimum des vidéos prises en compte">
+    {% for d in age_presets %}
+      <button class="{{ 'on' if d == days }}" onclick="location.href='{{ url_for('heures', c=c.id, days=d) }}'">{{ d }} j</button>
+    {% endfor %}
+  </div>
+</div>
+
+{% if not analysis or analysis.error %}
+  <div class="card"><div class="empty">
+    <div class="ic">⏱️</div><h3>Analyse indisponible</h3>
+    <p class="tiny">{{ (analysis.error if analysis else '') or "Connecte la chaîne pour analyser ses heures de publication." }}</p>
+    {% if not c.connected %}<a class="btn primary" style="margin-top:16px;" href="{{ url_for('connect', name=c.id) }}">Connecter la chaîne</a>{% endif %}
+  </div></div>
+{% else %}
+
+<div class="dash">
+  <div class="grid" style="gap:24px;">
+    <section class="card">
+      <div class="card-h">
+        <h2>Heure par heure — fenêtre {{ '%02d'|format(analysis.window[0]) }}h → {{ '%02d'|format(analysis.window[1]) }}h</h2>
+        <span class="tiny muted">{{ analysis.n_posts }} vidéo(s) analysée(s)</span>
+      </div>
+      <table class="tbl">
+        <thead><tr>
+          <th>Heure</th><th>Verdict</th><th class="num">Vidéos</th>
+          <th class="num">Démarrage</th><th class="num">Après</th><th style="width:34%;">Répartition</th>
+        </tr></thead>
+        <tbody>
+        {% for r in analysis.rows %}
+          <tr>
+            <td class="mono">{{ '%02d'|format(r.hour) }}:00</td>
+            <td>
+              {% if r.verdict == 'top' %}<span class="pill ok">top</span>
+              {% elif r.verdict == 'moyen' %}<span class="pill info">moyen</span>
+              {% elif r.verdict == 'faible' %}<span class="pill warn">faible</span>
+              {% elif r.verdict == 'nul' %}<span class="pill off">nul</span>
+              {% else %}<span class="tiny muted">jamais posté</span>{% endif %}
+            </td>
+            <td class="num">{{ r.count or '—' }}</td>
+            <td class="num">{{ r.start if r.start is not none else '—' }}</td>
+            <td class="num">{{ r.after if r.after is not none else '—' }}</td>
+            <td>
+              <div style="display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--bg-4);">
+                <span style="width:{{ r.startPct }}%;background:var(--chart);"></span>
+                <span style="width:{{ r.afterPct }}%;background:#2f6f9e;"></span>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="card-b hint" style="border-top:1px solid var(--line);">
+        <span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;">
+          <span style="width:10px;height:10px;border-radius:2px;background:var(--chart);display:inline-block;"></span> vues du démarrage (J0–J1)</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;">
+          <span style="width:10px;height:10px;border-radius:2px;background:#2f6f9e;display:inline-block;"></span> vues après le démarrage</span>
+        <div style="margin-top:8px;">
+          Méthode : {{ "démarrage + suite (YouTube Analytics)" if analysis.method == 'analytics' else "repli sur les vues/jour (Analytics indisponible)" }}.
+          Les vidéos de moins de {{ analysis.min_age }} jour(s) sont écartées ({{ analysis.n_recent_excluded }} exclue(s)),
+          ainsi que {{ analysis.n_outside_window }} vidéo(s) publiée(s) hors fenêtre.
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <aside class="grid" style="gap:24px;">
+    <section class="card">
+      <div class="card-h"><h2>À retenir</h2></div>
+      <div class="card-b">
+        {% if analysis.best %}
+          <div class="stat-lbl">Meilleure heure</div>
+          <div class="stat-big">{{ '%02d'|format(analysis.best.hour) }}h</div>
+          <div class="tiny muted" style="margin-top:4px;">
+            {{ analysis.best.total }} vues en moyenne par vidéo ({{ analysis.best.count }} vidéo(s)).
+          </div>
+        {% else %}
+          <div class="tiny muted">Pas encore assez de vidéos publiées à des heures différentes.</div>
+        {% endif %}
+
+        {% if analysis.null_hours %}
+        <div style="height:1px;background:var(--line);margin:18px 0;"></div>
+        <div class="stat-lbl" style="margin-bottom:8px;">Heures à éviter (≈ 0 vue)</div>
+        <div class="slotlist">
+          {% for r in analysis.null_hours %}<span class="slot past">{{ '%02d'|format(r.hour) }}h</span>{% endfor %}
+        </div>
+        {% endif %}
+
+        {% if analysis.weak_hours %}
+        <div class="stat-lbl" style="margin:16px 0 8px;">Heures faibles</div>
+        <div class="slotlist">
+          {% for r in analysis.weak_hours %}<span class="slot">{{ '%02d'|format(r.hour) }}h</span>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Réglage actuel</h2></div>
+      <div class="card-b">
+        <div class="tiny muted" style="margin-bottom:8px;">Mode {{ analysis.mode }}</div>
+        <div class="slotlist">
+          {% for x in analysis.configured %}<span class="slot next">{{ x }}</span>{% endfor %}
+        </div>
+        <a class="btn ghost" style="margin-top:16px;width:100%;justify-content:center;"
+           href="{{ url_for('planification', c=c.id) }}">Modifier la planification</a>
+        {% if analysis.best %}
+        <form method="post" action="{{ url_for('channel_settings', name=c.id) }}" style="margin-top:10px;">
+          <input type="hidden" name="section" value="schedule">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <input type="hidden" name="enabled" value="{{ 'on' if c.active else '' }}">
+          <input type="hidden" name="posts_per_day" value="{{ c.cfg.posts_per_day }}">
+          <input type="hidden" name="window_start" value="{{ c.cfg.window_start }}">
+          <input type="hidden" name="window_end" value="{{ c.cfg.window_end }}">
+          <input type="hidden" name="fixed_times" value="{{ '%02d:00'|format(analysis.best.hour) }}">
+          <input type="hidden" name="fixed_duration" value="permanent">
+          <button class="btn" style="width:100%;justify-content:center;">Fixer sur {{ '%02d'|format(analysis.best.hour) }}h</button>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

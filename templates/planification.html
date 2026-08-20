@@ -1,0 +1,162 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Planification</h1>
+    <div class="page-sub">Quand et à quel rythme « {{ c.id }} » publie automatiquement.</div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <form method="post" action="{{ url_for('regenerate_channel_schedule', name=c.id) }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <button class="btn ghost">↻ Re-tirer les horaires du jour</button>
+    </form>
+    <form method="post" action="{{ url_for('post_now', name=c.id) }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <button class="btn primary" {{ 'disabled' if not c.pending or not c.connected }}>▶ Poster maintenant</button>
+    </form>
+  </div>
+</div>
+
+<div class="dash">
+  <div class="grid" style="gap:24px;">
+    <form method="post" action="{{ url_for('channel_settings', name=c.id) }}" class="card">
+      <input type="hidden" name="section" value="schedule">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <div class="card-h"><h2>Publication automatique</h2>
+        <span class="pill {{ 'ok' if c.active else 'warn' }}">{{ 'Activée' if c.active else 'En pause' }}</span></div>
+      <div class="card-b">
+
+        <div class="form-row">
+          <div>
+            <div>Planifier les publications</div>
+            <div class="hint">Le planificateur poste tout seul les vidéos de la file d'attente.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" name="enabled" {{ 'checked' if c.active }}>
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
+
+        <div class="row2" style="margin-top:18px;">
+          <div class="field"><label>Vidéos par jour</label>
+            <input class="inp" type="number" name="posts_per_day" min="0" max="50" value="{{ c.cfg.posts_per_day }}"></div>
+          <div class="field"><label>Fenêtre horaire</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input class="inp" type="number" name="window_start" min="0" max="23" value="{{ c.cfg.window_start }}">
+              <span class="muted">→</span>
+              <input class="inp" type="number" name="window_end" min="0" max="24" value="{{ c.cfg.window_end }}">
+            </div></div>
+        </div>
+        <div class="hint" style="margin-top:8px;">
+          Les heures sont tirées au hasard dans cette fenêtre, chaque jour à 00h01 — ça évite un rythme
+          « robot » repérable par YouTube. Fuseau : {{ tz }}.
+        </div>
+
+        <div style="height:1px;background:var(--line);margin:22px 0;"></div>
+
+        <div style="font-size:14px;margin-bottom:4px;">Heures fixes (optionnel)</div>
+        <div class="hint">Renseignées, elles remplacent le tirage aléatoire <b>et</b> le nombre de vidéos/jour.</div>
+        <div class="row2" style="margin-top:14px;">
+          <div class="field"><label>Heures (HH:MM séparées par des virgules)</label>
+            <input class="inp" type="text" name="fixed_times" value="{{ fixed|join(', ') }}" placeholder="ex. 11:30, 18:00 — vide = aléatoire"></div>
+          <div class="field"><label>Durée</label>
+            <select class="inp" name="fixed_duration">
+              {% for v, lb in [('permanent',"Permanent (jusqu'à changement)"),('1',"Aujourd'hui seulement"),('2','2 jours'),('3','3 jours'),('7','7 jours'),('14','14 jours')] %}
+                <option value="{{ v }}" {{ 'selected' if fixed_duration == v }}>{{ lb }}</option>
+              {% endfor %}
+            </select></div>
+        </div>
+        <div class="hint" style="margin-top:8px;">
+          {% if fixed %}
+            {% if fixed_until %}Heures fixes actives <b>jusqu'au {{ fixed_until|frdate }} inclus</b>, puis retour à l'aléatoire.
+            {% else %}Heures fixes <b>permanentes</b>.{% endif %}
+          {% else %}Aucune heure fixe : les créneaux sont tirés au hasard dans la fenêtre.{% endif %}
+        </div>
+
+        <button class="btn primary" style="margin-top:22px;">Enregistrer</button>
+      </div>
+    </form>
+
+    {% if others %}
+    <section class="card">
+      <div class="card-h"><h2>Cadence des autres chaînes</h2>
+        <form method="post" action="{{ url_for('regenerate_schedule') }}">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <button class="btn sm ghost">↻ Toutes</button>
+        </form>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Chaîne</th><th>État</th><th class="num">Vidéos/j</th><th class="num">En file</th><th class="num">Créneaux restants</th></tr></thead>
+        <tbody>
+        {% for o in others %}
+          <tr>
+            <td><a class="link" href="{{ url_for('planification', c=o.id) }}">{{ o.id }}</a></td>
+            <td><span class="pill {{ 'ok' if o.active else 'warn' }}">{{ 'auto' if o.active else 'pause' }}</span></td>
+            <td class="num">
+              <form method="post" action="{{ url_for('set_cadence', name=o.id) }}" style="display:inline-flex;gap:6px;justify-content:flex-end;">
+                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <input class="inp" style="width:64px;padding:5px 8px;" type="number" name="posts_per_day" min="0" max="50" value="{{ o.cfg.posts_per_day }}">
+                <button class="btn sm ghost">OK</button>
+              </form>
+            </td>
+            <td class="num">{{ o.pending }}</td>
+            <td class="num">{{ o.slots|length }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="grid" style="gap:24px;">
+    <section class="card">
+      <div class="card-h"><h2>Créneaux d'aujourd'hui</h2></div>
+      <div class="card-b">
+        {% if c.slots_all %}
+          <div class="slotlist">
+            {% for s in c.slots_all %}
+              <span class="slot {{ 'past' if s not in c.slots else ('next' if s == c.slots[0] else '') }}">{{ s }}</span>
+            {% endfor %}
+          </div>
+          <div class="tiny muted" style="margin-top:14px;">
+            {{ c.slots|length }} restant(s) sur {{ c.slots_all|length }}.
+            {% if c.pending < c.slots|length %}
+              <br><span class="down">File trop courte : {{ c.pending }} vidéo(s) pour {{ c.slots|length }} créneau(x).</span>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="tiny muted">Aucun créneau prévu aujourd'hui.</div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>File d'attente</h2></div>
+      <div class="card-b">
+        <div class="stat-big">{{ n_queue }}</div>
+        <div class="stat-lbl">vidéo(s) prête(s) à partir</div>
+        <div class="bar" style="margin-top:14px;">
+          <span style="width:{{ [100, (n_queue * 100 / (c.cfg.posts_per_day or 1))]|min|round|int }}%;"></span>
+        </div>
+        <div class="tiny muted" style="margin-top:8px;">
+          Soit environ {{ (n_queue / (c.cfg.posts_per_day or 1))|round(1) }} jour(s) d'autonomie
+          au rythme de {{ c.cfg.posts_per_day }} vidéo(s)/jour.
+        </div>
+        <button class="btn ghost" style="margin-top:16px;width:100%;justify-content:center;" data-open-create>Ajouter des vidéos</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Bon à savoir</h2></div>
+      <div class="card-b hint">
+        <p style="margin:0 0 10px;">Une chaîne récente est bridée par YouTube (~15–20 mises en ligne/jour).
+        Au-delà, l'API renvoie une erreur 403 et le planificateur réessaie plus tard — aucune vidéo n'est perdue.</p>
+        <p style="margin:0;">Quota API : ~100 unités par mise en ligne, 10 000 unités/jour offertes,
+        soit ~100 vidéos/jour toutes chaînes confondues.</p>
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Journal</h1>
+    <div class="page-sub">Ce que le planificateur a fait — uploads, erreurs, quotas.</div>
+  </div>
+  <div class="seg">
+    <button class="{{ 'on' if scope == 'channel' }}" onclick="location.href='{{ url_for('journal', c=c.id, scope='channel') }}'">{{ c.id }}</button>
+    <button class="{{ 'on' if scope == 'all' }}" onclick="location.href='{{ url_for('journal', c=c.id, scope='all') }}'">Toutes les chaînes</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-h"><h2>{{ lines|length }} ligne(s) — les plus récentes en premier</h2>
+    <a class="btn sm ghost" href="{{ request.full_path }}">↻ Rafraîchir</a></div>
+  <div class="card-b" style="padding:0;">
+    {% if lines %}
+      <div class="logbox">
+        {% for ln in lines %}
+          <div class="logline {{ 'err' if 'ERROR' in ln or 'échec' in ln else ('warn' if 'WARNING' in ln else '') }}">{{ ln }}</div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty"><div class="ic">🗒️</div><h3>Journal vide</h3>
+        <p class="tiny">Rien à signaler{{ ' pour cette chaîne' if scope == 'channel' }} pour le moment.</p></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

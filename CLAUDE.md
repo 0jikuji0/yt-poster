@@ -21,7 +21,15 @@ ses métadonnées (titre, description, tags). Le script retient ce qui a déjà 
 - `webapp.py` — appli Flask : login mot de passe, OAuth web (« Connecter »), dépôt de
   vidéos, réglages par chaîne, et **planificateur intégré** (APScheduler) qui poste tout
   seul à des heures aléatoires dans une fenêtre horaire. Réutilise les fonctions de `poster.py`.
-- `templates/`, `static/style.css` — UI.
+- UI **façon YouTube Studio** (thème sombre, topbar + barre latérale), une chaîne à la
+  fois (sélecteur sous l'avatar, paramètre `?c=<nom>` mémorisé en session) :
+  - `templates/_studio.html` (coquille : topbar, modale « Créer ») + `templates/_nav.html` (barre latérale) ;
+  - pages : `dashboard`, `contenus`, `analytics`, `planification`, `heures`, `journal`,
+    `parametres`, `chaines`, `help_*` ; `login`/`setup` sont autonomes ;
+  - `static/studio.css` (design system : variables de couleurs, cartes, tableaux, formulaires)
+    et `static/studio.js` (menu, sélecteur de chaîne, modale, courbes SVG `[data-chart]`).
+  - Contexte injecté dans tous les templates par `inject_nav()` : `cur` (chaîne active,
+    via `channel_card()`), `cur_id`, `nav_channels`, `tz`. Filtres Jinja : `n`, `signed`, `frdate`.
 - `config.json` (non versionné) : mot de passe haché, `base_url`, `timezone`, réglages par chaîne.
 - `channels/<nom>/` : vidéos + JSON + `.uploaded.json`. `tokens/token_<nom>.json` : OAuth par chaîne.
 - `yt-poster-web.service` : unité systemd pour faire tourner l'appli en permanence.

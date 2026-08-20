@@ -1,0 +1,64 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Toutes les chaînes</h1>
+    <div class="page-sub">Cumul de {{ rows|length }} chaîne(s) — clique une ligne pour ouvrir son Studio.</div>
+  </div>
+  <form method="post" action="{{ url_for('add_channel') }}" style="display:flex;gap:8px;">
+    <input class="inp" type="text" name="name" placeholder="Nouvelle chaîne" required style="width:190px;">
+    <button class="btn primary">Ajouter</button>
+  </form>
+</div>
+
+<div class="kpis" style="margin-bottom:24px;">
+  <div class="kpi"><div class="l">Vues totales</div><div class="v">{{ tot.views|n }}</div><div class="c">toutes chaînes connectées</div></div>
+  <div class="kpi"><div class="l">Abonnés</div><div class="v">{{ tot.subs|n }}</div><div class="c">{{ tot.videos|n }} vidéo(s) en ligne</div></div>
+  <div class="kpi"><div class="l">File d'attente</div><div class="v">{{ tot.pending|n }}</div><div class="c">{{ tot.posted|n }} publiée(s) par l'outil</div></div>
+</div>
+
+<div class="card">
+  <table class="tbl">
+    <thead><tr>
+      <th>Chaîne</th><th>État</th><th class="num">Abonnés</th><th class="num">Vues totales</th>
+      <th class="num">Vues · 28 j</th><th class="num">Abonnés · 28 j</th><th class="num">File</th><th class="num">Créneaux</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>
+          <div class="vrow">
+            <span class="thumb" style="width:34px;height:34px;border-radius:50%;background:{{ 'linear-gradient(140deg,#ff0033,#ff7a00)' if r.c.connected else '#2b2b2b' }};color:#fff;font-weight:500;text-transform:uppercase;">{{ r.c.id[:1] }}</span>
+            <span style="min-width:0;">
+              <a class="t link" href="{{ url_for('dashboard', c=r.c.id) }}">{{ r.c.id }}</a>
+              <span class="d">{{ r.c.title or 'titre inconnu' }}</span>
+            </span>
+          </div>
+        </td>
+        <td>
+          {% if r.c.connected %}<span class="pill ok"><span class="dot"></span>connectée</span>
+          {% else %}<span class="pill off"><span class="dot"></span>hors ligne</span>{% endif %}
+          {% if r.c.active %}<span class="pill info" style="margin-left:6px;">auto</span>{% endif %}
+        </td>
+        <td class="num">{{ r.totals.subs|n if r.totals else '—' }}</td>
+        <td class="num">{{ r.totals.views|n if r.totals else '—' }}</td>
+        <td class="num">{{ r.w28.views|n }}</td>
+        <td class="num">{{ r.w28.subs|signed }}</td>
+        <td class="num">{{ r.c.pending }}</td>
+        <td class="num">{{ r.c.slots|length }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if not has_secrets %}
+<div class="banner warn" style="margin-top:24px;">
+  <span class="ic">🔑</span>
+  <div><div class="t">Aucun <span class="mono">client_secret.json</span> installé</div>
+       <div class="s">Aucune chaîne ne pourra être connectée tant qu'il manque.</div></div>
+  <a class="btn" href="{{ url_for('help_credentials') }}">Installer</a>
+</div>
+{% endif %}
+{% endblock %}

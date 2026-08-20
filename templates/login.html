@@ -1,13 +1,35 @@
-{% extends "base.html" %}
-{% block title %}Connexion — yt-poster{% endblock %}
-{% block content %}
-<div class="card narrow">
-  <h1>Connexion</h1>
-  <form method="post">
-    <label>Mot de passe
-      <input type="password" name="password" autofocus required>
-    </label>
-    <button type="submit">Entrer</button>
-  </form>
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion — clipstudio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='studio.css') }}">
+</head>
+<body>
+<div id="flash">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}<div class="flash {{ category }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
 </div>
-{% endblock %}
+<div class="auth">
+  <div class="card">
+    <div class="card-b">
+      <div class="tb-logo" style="justify-content:center;margin-bottom:22px;">
+        <span class="play"><i></i></span><b>clipstudio</b>
+      </div>
+      <h1>Connexion</h1>
+      <p class="tiny muted" style="margin:0 0 20px;">Interface d'auto-publication YouTube Shorts.</p>
+      <form method="post">
+        <div class="field">
+          <label>Mot de passe</label>
+          <input class="inp" type="password" name="password" autofocus required>
+        </div>
+        <button class="btn primary" style="margin-top:18px;width:100%;justify-content:center;">Entrer</button>
+      </form>
+    </div>
+  </div>
+</div>
+</body>
+</html>

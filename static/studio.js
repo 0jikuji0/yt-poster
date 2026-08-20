@@ -86,7 +86,8 @@
   }
 
   // ------------------------------------------------------------ graphiques
-  var COL = { views: "#62b8f6", subs: "#ffd166" };
+  // Toutes les métriques se tracent en bleu, comme dans Studio.
+  var COL = { views: "#62b8f6", watch: "#62b8f6", subs: "#62b8f6" };
   var MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 
   function grp(v) { return String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
@@ -101,7 +102,7 @@
     if (s2 >= 1e6) out = (v / 1e6).toFixed(1) + " M";
     else if (s2 >= 1e5) out = Math.round(v / 1000) + " k";
     else if (s2 >= 1000) out = (v / 1000).toFixed(1) + " k";
-    else out = String(Math.round(v));
+    else out = v % 1 ? v.toFixed(1) : String(v);
     return out.replace(".", ",").replace(",0 ", " ");
   }
 
@@ -118,10 +119,13 @@
     }
     if (!data.length) { el.innerHTML = '<div class="tiny muted" style="padding:20px 0;">Aucune donnée sur cette période.</div>'; return; }
 
+    // La durée de visionnage est stockée en minutes mais tracée en heures.
+    var val = function (d) { return key === "watch" ? d[key] / 60 : d[key]; };
+
     var w = el.clientWidth || 640, h = el.clientHeight || 200;
     var padL = 0, padR = 58, padT = 14, padB = 28;
     var iw = Math.max(10, w - padL - padR), ih = Math.max(10, h - padT - padB);
-    var vals = data.map(function (d) { return d[key]; });
+    var vals = data.map(val);
     // Façon Studio : le haut de grille est la valeur max réelle (« 3,8 k »), pas un arrondi.
     var max = Math.max.apply(null, vals) || 1;
     var min = Math.min.apply(null, vals);
@@ -131,7 +135,7 @@
     var x = function (i) { return padL + (n === 1 ? iw / 2 : iw * i / (n - 1)); };
     var y = function (v) { return padT + ih - ih * (v - lo) / span; };
 
-    var line = data.map(function (d, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(d[key]).toFixed(1); }).join(" ");
+    var line = data.map(function (d, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(val(d)).toFixed(1); }).join(" ");
     var area = line + " L" + x(n - 1).toFixed(1) + " " + y(lo).toFixed(1) + " L" + x(0).toFixed(1) + " " + y(lo).toFixed(1) + " Z";
     var col = COL[key] || COL.views;
     var uid = "g" + Math.random().toString(36).slice(2, 8);
@@ -171,9 +175,9 @@
       + '<circle class="hl" r="4" fill="' + col + '" stroke="#0f0f0f" stroke-width="2" style="display:none"/>'
       + hits + "</svg>";
 
-    el._pts = data.map(function (d, i) { return { cx: x(i), cy: y(d[key]), v: d[key], date: d.date }; });
+    el._pts = data.map(function (d, i) { return { cx: x(i), cy: y(val(d)), v: val(d), date: d.date }; });
     el._col = col;
-    el._unit = key === "subs" ? "abonnés" : (key === "watch" ? "minutes" : "vues");
+    el._unit = key === "subs" ? "abonnés" : (key === "watch" ? "heures" : "vues");
   }
 
   var tip = document.createElement("div");
@@ -190,8 +194,9 @@
     var cross = host.querySelector(".cross"), hl = host.querySelector(".hl");
     if (cross) { cross.setAttribute("x1", p.cx); cross.setAttribute("x2", p.cx); cross.style.display = ""; }
     if (hl) { hl.setAttribute("cx", p.cx); hl.setAttribute("cy", p.cy); hl.style.display = ""; }
+    var vfmt = p.v % 1 ? p.v.toFixed(1).replace(".", ",") : grp(p.v);
     tip.innerHTML = '<div style="color:#aaa;margin-bottom:3px;">' + frDate(p.date) + "</div>"
-      + '<div><b style="color:' + host._col + ';">' + grp(p.v) + "</b> " + host._unit + "</div>";
+      + '<div><b style="color:' + host._col + ';">' + vfmt + "</b> " + host._unit + "</div>";
     tip.style.display = "block";
     var lx = e.clientX + 14, ly = e.clientY + 14;
     if (lx + tip.offsetWidth > window.innerWidth - 8) lx = e.clientX - tip.offsetWidth - 14;
@@ -207,6 +212,19 @@
       if (hl) hl.style.display = "none";
     });
   }
+
+  // Bande de KPI : cliquer sur « Vues / Durée de visionnage / Abonnés »
+  // sélectionne la cellule et bascule la courbe voisine sur cette métrique.
+  document.addEventListener("click", function (e) {
+    var cell = e.target.closest ? e.target.closest(".kpi-band .cell[data-kpi]") : null;
+    if (!cell) return;
+    var scope = cell.closest("section") || cell.closest(".card") || document;
+    var chart = scope.querySelector("[data-chart]");
+    if (!chart) return;
+    chart.setAttribute("data-key", cell.getAttribute("data-kpi"));
+    renderChart(chart);
+    $$(".cell", cell.parentNode).forEach(function (c) { c.classList.toggle("sel", c === cell); });
+  });
 
   // Puces de suggestion : déplient la réponse calculée côté serveur.
   document.addEventListener("click", function (e) {

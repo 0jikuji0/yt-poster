@@ -93,17 +93,17 @@
       </h2>
 
       <div class="kpi-band">
-        <div class="cell sel">
+        <div class="cell sel" data-kpi="views">
           <div class="l">Vues</div>
           <div class="v">{{ a.cur28.views|k }} {{ trend(a.cmp_views.dir) }}</div>
           <div class="c">{{ a.cmp_views.label }}</div>
         </div>
-        <div class="cell">
+        <div class="cell" data-kpi="watch">
           <div class="l">Durée de visionnage (heures)</div>
           <div class="v">{{ a.watch_hours|k }} {{ trend(a.cmp_watch.dir) }}</div>
           <div class="c">{{ a.cmp_watch.label }}</div>
         </div>
-        <div class="cell">
+        <div class="cell" data-kpi="subs">
           <div class="l">Abonnés</div>
           <div class="v">{{ a.cur28.subs|ksigned }} {{ trend(a.cmp_subs.dir) }}</div>
           <div class="c">{{ a.cmp_subs.label }}</div>

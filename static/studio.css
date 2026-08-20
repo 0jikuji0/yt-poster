@@ -498,6 +498,7 @@ textarea.inp { resize: vertical; }
 .kpi-band .cell.sel { background: var(--bg-2); }
 .kpi-band .cell:last-child { border-right: none; }
 .kpi-band .cell:hover { background: #2e2e2e; }
+.kpi-band .cell[data-kpi] { cursor: pointer; }
 .kpi-band .l { font-size: 13px; color: var(--txt-2); }
 .kpi-band .v {
   font-size: 28px; font-weight: 400; margin: 8px 0 10px; display: flex;

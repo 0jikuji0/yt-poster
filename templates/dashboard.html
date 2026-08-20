@@ -63,17 +63,17 @@
         <span class="tiny muted">{{ agg.n_connected }}/{{ agg.n_channels }} chaîne(s) connectée(s)</span></div>
       <div class="card-b">
         <div class="kpi-band" style="margin-bottom:20px;">
-          <div class="cell sel">
+          <div class="cell sel" data-kpi="views">
             <div class="l">Vues</div>
             <div class="v">{{ agg.cur28.views|k }} {{ trend(agg.cmp_views.dir) }}</div>
             <div class="c">{{ agg.cmp_views.label }}</div>
           </div>
-          <div class="cell">
+          <div class="cell" data-kpi="watch">
             <div class="l">Durée de visionnage (heures)</div>
             <div class="v">{{ agg.watch_hours|k }} {{ trend(agg.cmp_watch.dir) }}</div>
             <div class="c">{{ agg.cmp_watch.label }}</div>
           </div>
-          <div class="cell">
+          <div class="cell" data-kpi="subs">
             <div class="l">Abonnés</div>
             <div class="v">{{ agg.cur28.subs|ksigned }} {{ trend(agg.cmp_subs.dir) }}</div>
             <div class="c">{{ agg.cmp_subs.label }}</div>

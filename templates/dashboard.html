@@ -59,8 +59,13 @@
 
     {# -------- Toutes les chaînes réunies : KPI + courbe + comparatif -------- #}
     <section class="card">
-      <div class="card-h"><h2>Vues des 28 derniers jours — toutes les chaînes</h2>
-        <span class="tiny muted">{{ agg.n_connected }}/{{ agg.n_channels }} chaîne(s) connectée(s)</span></div>
+      <div class="card-h"><h2>Vues — toutes les chaînes · {{ p.label|lower }}</h2>
+        <div class="seg">
+          {% for d, lb in [('7','7 j'),('28','28 j'),('90','90 j'),('all','Tout')] %}
+            <a role="button" class="segbtn {{ 'on' if p.days == d }}"
+               href="{{ url_for('dashboard', c=c.id, days=d) }}">{{ lb }}</a>
+          {% endfor %}
+        </div></div>
       <div class="card-b">
         <div class="kpi-band" style="margin-bottom:20px;">
           <div class="cell sel" data-kpi="views">
@@ -81,7 +86,7 @@
         </div>
 
         {% if agg.daily %}
-          <div data-chart='{{ agg.daily|tojson }}' data-key="views" data-range="28" style="height:180px;"></div>
+          <div data-chart='{{ agg.daily|tojson }}' data-key="views" data-range="{{ p.days }}" style="height:180px;"></div>
         {% else %}
           <div class="empty" style="padding:28px 12px;">
             <div class="ic">📈</div>
@@ -91,7 +96,7 @@
         {% endif %}
 
         <table class="tbl" style="margin-top:18px;">
-          <thead><tr><th>Chaîne</th><th class="num">Vues · 28 j</th><th class="num">Abonnés · 28 j</th>
+          <thead><tr><th>Chaîne</th><th class="num">Vues · {{ p.short }}</th><th class="num">Abonnés · {{ p.short }}</th>
                      <th class="num">Abonnés</th><th class="num">En file</th></tr></thead>
           <tbody>
             {% for r in agg.rows %}
@@ -110,7 +115,7 @@
           </tbody>
         </table>
         <div class="tiny muted" style="margin-top:12px;">
-          Total : {{ agg.cur28.views|n }} vues et {{ agg.cur28.subs|signed }} abonné(s) sur 28 jours ·
+          Total : {{ agg.cur28.views|n }} vues et {{ agg.cur28.subs|signed }} abonné(s) sur la période ·
           {{ agg.totals.subs|n if agg.totals else '—' }} abonné(s) au compteur ·
           {{ agg.pending_total }} vidéo(s) en file toutes chaînes.
         </div>

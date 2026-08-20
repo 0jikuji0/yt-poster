@@ -375,6 +375,13 @@ textarea.inp { resize: vertical; }
 }
 .seg button:hover { color: var(--txt); }
 .seg button.on { background: var(--bg-4); color: var(--txt); }
+/* Variante lien (sélecteur de période rechargé côté serveur) */
+.seg .segbtn {
+  display: inline-block; color: var(--txt-2); border-radius: 999px;
+  padding: 5px 14px; font-size: 12px; font-weight: 500;
+}
+.seg .segbtn:hover { color: var(--txt); }
+.seg .segbtn.on { background: var(--bg-4); color: var(--txt); }
 
 /* Barre d'actions groupées (sélection multiple dans Contenus) */
 .bulk {
@@ -485,9 +492,20 @@ textarea.inp { resize: vertical; }
 }
 .an-tab:hover { color: var(--txt); }
 .an-tab.on { color: var(--txt); border-bottom-color: var(--txt); font-weight: 500; }
-.an-range { text-align: right; padding-bottom: 10px; display: flex; align-items: center; gap: 14px; }
+.an-range { text-align: right; padding-bottom: 10px; display: flex; align-items: center; gap: 14px;
+  position: relative; cursor: pointer; }
 .an-range .dates { font-size: 12px; color: var(--txt-2); }
 .an-range .lbl { font-size: 16px; color: var(--txt); }
+/* Menu déroulant de période (7 / 28 / 90 jours / toute la période) */
+.range-menu {
+  display: none; position: absolute; top: 100%; right: 0; z-index: 40; min-width: 210px;
+  background: #282828; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.6); padding: 8px; text-align: left;
+}
+.range-menu.open { display: block; }
+.range-menu a { display: block; padding: 9px 14px; border-radius: 8px; font-size: 14px; color: var(--txt); }
+.range-menu a:hover { background: #3f3f3f; }
+.range-menu a.on { background: var(--bg-4); font-weight: 500; }
 
 .an-grid { display: grid; grid-template-columns: minmax(0, 1fr) 285px; gap: 48px; align-items: start; }
 @media (max-width: 1180px) { .an-grid { grid-template-columns: minmax(0, 1fr); } }

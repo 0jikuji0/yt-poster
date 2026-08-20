@@ -49,17 +49,22 @@
 <div class="an-tabsrow">
   <nav class="an-tabs">
     {% for key, label in [('apercu','Aperçu'),('contenu','Contenu'),('audience','Audience'),('tendances','Tendances')] %}
-      <a class="an-tab {{ 'on' if tab == key }}" href="{{ url_for('analytics', c=c.id, tab=key) }}">{{ label }}</a>
+      <a class="an-tab {{ 'on' if tab == key }}" href="{{ url_for('analytics', c=c.id, tab=key, days=p.days) }}">{{ label }}</a>
     {% endfor %}
   </nav>
-  <div class="an-range">
+  <div class="an-range" data-menu-toggle>
     <div>
       <div class="dates">
         {% if a.period_start %}{{ a.period_start|frdate }} – {{ a.period_end|frdate }}{% else %}Aucune donnée{% endif %}
       </div>
-      <div class="lbl">28 derniers jours</div>
+      <div class="lbl">{{ p.label }}</div>
     </div>
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:var(--txt-2);"><path d="M7 10l5 5 5-5z"/></svg>
+    <div class="range-menu" data-menu>
+      {% for d, lb in [('7','7 derniers jours'),('28','28 derniers jours'),('90','90 derniers jours'),('all','Toute la période')] %}
+        <a class="{{ 'on' if p.days == d }}" href="{{ url_for('analytics', c=c.id, tab=tab, days=d) }}">{{ lb }}</a>
+      {% endfor %}
+    </div>
   </div>
 </div>
 
@@ -86,9 +91,9 @@
     <section class="an-card">
       <h2 class="an-headline">
         {% if a.cur28.views %}
-          Votre chaîne a enregistré {{ a.cur28.views|n }} vues au cours des 28 derniers jours
+          Votre chaîne a enregistré {{ a.cur28.views|n }} vues {{ p.phrase }}
         {% else %}
-          Aucune vue enregistrée au cours des 28 derniers jours
+          Aucune vue enregistrée {{ p.phrase }}
         {% endif %}
       </h2>
 
@@ -110,8 +115,8 @@
         </div>
       </div>
 
-      <div class="an-plot" data-chart='{{ a.daily|tojson }}' data-key="views" data-range="28"></div>
-      <a class="pill-btn" href="{{ url_for('analytics', c=c.id, tab='contenu') }}">Voir plus</a>
+      <div class="an-plot" data-chart='{{ a.daily|tojson }}' data-key="views" data-range="{{ p.days }}"></div>
+      <a class="pill-btn" href="{{ url_for('analytics', c=c.id, tab='contenu', days=p.days) }}">Voir plus</a>
     </section>
 
     <div class="an-hr"></div>
@@ -173,21 +178,21 @@
     {% elif tab == 'audience' %}
     <section class="an-card">
       <h2 class="an-headline">
-        {% if a.cur28.subs %}Votre chaîne a gagné {{ a.cur28.subs|signed }} abonnés au cours des 28 derniers jours
-        {% else %}Aucun abonné gagné au cours des 28 derniers jours{% endif %}
+        {% if a.cur28.subs %}Votre chaîne a gagné {{ a.cur28.subs|signed }} abonnés {{ p.phrase }}
+        {% else %}Aucun abonné gagné {{ p.phrase }}{% endif %}
       </h2>
       <div class="kpi-band">
         <div class="cell"><div class="l">Abonnés (total)</div>
           <div class="v">{{ a.totals.subs|k if a.totals else '—' }}</div>
           <div class="c">valeur en direct</div></div>
-        <div class="cell"><div class="l">Abonnés · 28 j</div>
+        <div class="cell"><div class="l">Abonnés · {{ p.short }}</div>
           <div class="v">{{ a.cur28.subs|ksigned }} {{ trend(a.cmp_subs.dir) }}</div>
           <div class="c">{{ a.cmp_subs.label }}</div></div>
         <div class="cell"><div class="l">Vues par abonné</div>
           <div class="v">{{ (a.cur28.views / a.totals.subs)|round(1) if a.totals and a.totals.subs else '—' }}</div>
-          <div class="c">sur les 28 derniers jours</div></div>
+          <div class="c">{{ p.phrase }}</div></div>
       </div>
-      <div class="an-plot" data-chart='{{ a.daily|tojson }}' data-key="subs" data-range="28"></div>
+      <div class="an-plot" data-chart='{{ a.daily|tojson }}' data-key="subs" data-range="{{ p.days }}"></div>
       <a class="pill-btn" href="{{ url_for('heures', c=c.id) }}">Quand publier pour toucher plus de monde ?</a>
     </section>
 
@@ -198,7 +203,7 @@
       <table class="tbl">
         <thead><tr><th>Période</th><th class="num">Vues</th><th class="num">Période précédente</th><th class="num">Écart</th><th class="num">Abonnés</th></tr></thead>
         <tbody>
-          {% for lbl, cw, pw in [('7 derniers jours', w7, w7p), ('28 derniers jours', a.cur28, a.prev28), ('90 derniers jours', w90, w90p)] %}
+          {% for lbl, cw, pw in [('7 derniers jours', w7, w7p), ('28 derniers jours', w28, w28p), ('90 derniers jours', w90, w90p)] %}
           <tr>
             <td>{{ lbl }}</td>
             <td class="num">{{ cw.views|n }}</td>

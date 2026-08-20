@@ -213,6 +213,18 @@
     });
   }
 
+  // Sélecteur de période : le bloc [data-menu-toggle] déplie son menu [data-menu].
+  document.addEventListener("click", function (e) {
+    var tg = e.target.closest ? e.target.closest("[data-menu-toggle]") : null;
+    $$("[data-menu]").forEach(function (m) {
+      if (!tg || m !== tg.querySelector("[data-menu]")) m.classList.remove("open");
+    });
+    if (tg && !e.target.closest("[data-menu]")) {
+      var menu = tg.querySelector("[data-menu]");
+      if (menu) menu.classList.toggle("open");
+    }
+  });
+
   // Bande de KPI : cliquer sur « Vues / Durée de visionnage / Abonnés »
   // sélectionne la cellule et bascule la courbe voisine sur cette métrique.
   document.addEventListener("click", function (e) {

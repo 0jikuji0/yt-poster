@@ -782,7 +782,7 @@ _ANALYTICS_CACHE: dict = {}  # nom -> (epoch, [ {date, views, subs}, ... ])
 _ANALYTICS_ERR: dict = {}    # nom -> dernière erreur API (texte) si échec
 TOTALS_TTL = 600
 ANALYTICS_TTL = 1800
-ANALYTICS_DAYS = 120
+ANALYTICS_DAYS = 730   # profondeur d'historique (couvre 90 j + comparatif et « toute la période »)
 
 
 def fetch_channel_totals(name: str, force: bool = False):
@@ -1218,13 +1218,37 @@ def compare(cur_v, prev_v, period="28 derniers jours"):
     return {"pct": pct, "dir": "down", "label": f"{abs(pct)} % de moins que les {period}"}
 
 
-def analytics_payload(name: str, c: dict, force: bool = False) -> dict:
-    """Données chiffrées d'une chaîne : totaux, séries par jour, comparatifs."""
+def parse_days(raw) -> "int | None":
+    """Période demandée dans l'URL : 7, 28, 90 ou None (toute la période)."""
+    if raw == "all":
+        return None
+    try:
+        d = int(raw)
+    except (TypeError, ValueError):
+        return 28
+    return d if d in (7, 28, 90) else 28
+
+
+def period_labels(days) -> dict:
+    """Libellés d'une période : long (« 28 derniers jours »), court (« 28 j »)
+    et tournure de phrase (« au cours des 28 derniers jours »)."""
+    if days is None:
+        return {"days": "all", "label": "Toute la période", "short": "tout",
+                "phrase": "depuis le début"}
+    return {"days": str(days), "label": f"{days} derniers jours", "short": f"{days} j",
+            "phrase": f"au cours des {days} derniers jours"}
+
+
+def analytics_payload(name: str, c: dict, force: bool = False, days: "int | None" = 28) -> dict:
+    """Données chiffrées d'une chaîne : totaux, séries par jour, comparatifs.
+    `days` = fenêtre d'analyse (7/28/90) ou None pour toute la période."""
     totals = fetch_channel_totals(name, force) if c["connected"] else None
     daily = (fetch_analytics_daily(name, force) if c["connected"] else None) or []
-    cur28 = window_sum(daily, 28)
-    prev28 = window_sum(daily, 28, offset=1)
-    first = daily[-28:][0]["date"] if daily else None
+    n = days if days is not None else (len(daily) or 1)
+    cur28 = window_sum(daily, n)
+    prev28 = window_sum(daily, n, offset=1)
+    period = f"{days} derniers jours" if days is not None else "période précédente"
+    first = daily[-n:][0]["date"] if daily else None
     return {
         "totals": totals,
         "daily": daily,
@@ -1232,9 +1256,9 @@ def analytics_payload(name: str, c: dict, force: bool = False) -> dict:
         "prev28": prev28,
         "views_pct": pct_change(cur28["views"], prev28["views"]),
         "subs_pct": pct_change(cur28["subs"], prev28["subs"]),
-        "cmp_views": compare(cur28["views"], prev28["views"]),
-        "cmp_watch": compare(cur28["watch"], prev28["watch"]),
-        "cmp_subs": compare(cur28["subs"], prev28["subs"]),
+        "cmp_views": compare(cur28["views"], prev28["views"], period),
+        "cmp_watch": compare(cur28["watch"], prev28["watch"], period),
+        "cmp_subs": compare(cur28["subs"], prev28["subs"], period),
         "watch_hours": round(cur28["watch"] / 60.0, 1),
         "period_start": first,
         "period_end": daily[-1]["date"] if daily else None,
@@ -1270,9 +1294,9 @@ def home():
     return redirect(url_for("analytics", **request.args))
 
 
-def aggregate_analytics() -> dict:
-    """Statistiques toutes chaînes réunies : série quotidienne cumulée, KPI 28 j
-    agrégés (avec comparatif), totaux, et une ligne de synthèse par chaîne."""
+def aggregate_analytics(days: "int | None" = 28) -> dict:
+    """Statistiques toutes chaînes réunies : série quotidienne cumulée, KPI
+    agrégés sur la période (avec comparatif), totaux, et une ligne par chaîne."""
     merged = {}
     cur = {"views": 0, "subs": 0, "watch": 0}
     prev = {"views": 0, "subs": 0, "watch": 0}
@@ -1281,7 +1305,7 @@ def aggregate_analytics() -> dict:
     rows = []
     for nm in config["channels"]:
         cc = card(nm)
-        aa = analytics_payload(nm, cc)
+        aa = analytics_payload(nm, cc, days=days)
         for d in aa["daily"]:
             e = merged.setdefault(d["date"], {"date": d["date"], "views": 0, "watch": 0, "subs": 0})
             e["views"] += d["views"]; e["watch"] += d["watch"]; e["subs"] += d["subs"]
@@ -1297,12 +1321,13 @@ def aggregate_analytics() -> dict:
                      "views28": aa["cur28"]["views"], "subs28": aa["cur28"]["subs"],
                      "subs": aa["totals"]["subs"] if aa["totals"] else None})
     rows.sort(key=lambda r: r["views28"], reverse=True)
+    period = f"{days} derniers jours" if days is not None else "période précédente"
     return {
         "daily": sorted(merged.values(), key=lambda e: e["date"]),
         "cur28": cur, "prev28": prev,
-        "cmp_views": compare(cur["views"], prev["views"]),
-        "cmp_watch": compare(cur["watch"], prev["watch"]),
-        "cmp_subs": compare(cur["subs"], prev["subs"]),
+        "cmp_views": compare(cur["views"], prev["views"], period),
+        "cmp_watch": compare(cur["watch"], prev["watch"], period),
+        "cmp_subs": compare(cur["subs"], prev["subs"], period),
         "watch_hours": round(cur["watch"] / 60.0, 1),
         "totals": tot if has_totals else None,
         "rows": rows,
@@ -1320,12 +1345,13 @@ def dashboard():
     name = current_channel()
     c = card(name)
     a = analytics_payload(name, c)
+    days = parse_days(request.args.get("days") or "28")
     yt = fetch_youtube_stats(name) if c["connected"] else None
     posted = posted_videos(name, yt)
     queue = queued_videos(name)
     return render_template("dashboard.html", page="dashboard", page_name="Tableau de bord",
-                           c=c, a=a, agg=aggregate_analytics(), yt=yt,
-                           last=(posted[0] if posted else None),
+                           c=c, a=a, agg=aggregate_analytics(days), p=period_labels(days),
+                           yt=yt, last=(posted[0] if posted else None),
                            posted=posted[:5], queue=queue[:5],
                            n_queue=len(queue), has_secrets=SECRETS_PATH.exists())
 
@@ -1359,7 +1385,8 @@ def analytics():
     name = current_channel()
     c = card(name)
     force = request.args.get("refresh") == "1"
-    a = analytics_payload(name, c, force=force)
+    days = parse_days(request.args.get("days") or "28")
+    a = analytics_payload(name, c, force=force, days=days)
     yt = fetch_youtube_stats(name, force=force) if c["connected"] else None
     tab = request.args.get("tab") or "apercu"
     if tab not in ("apercu", "contenu", "audience", "tendances"):
@@ -1368,14 +1395,15 @@ def analytics():
     # Réponses des « puces » de suggestion (calculées ici, aucune IA).
     vids = (yt or {}).get("videos", [])
     last = (posted_videos(name, yt) or [None])[0]
+    p = period_labels(days)
     chips = [
         {"q": "Comment les spectateurs ont-ils trouvé mes contenus ?",
-         "a": ("Vos Shorts ont enregistré %s vue(s) sur les 28 derniers jours, essentiellement "
+         "a": ("Vos Shorts ont enregistré %s vue(s) %s, essentiellement "
                "via le flux Shorts. Les créneaux qui marchent le mieux sont dans « Meilleures heures »."
-               % fmt_number(a["cur28"]["views"]))},
+               % (fmt_number(a["cur28"]["views"]), p["phrase"]))},
         {"q": "Combien de nouveaux spectateurs ai-je touchés ?",
-         "a": ("%s abonné(s) sur les 28 derniers jours (%s), pour un total de %s."
-               % (fmt_signed(a["cur28"]["subs"]), a["cmp_subs"]["label"].lower(),
+         "a": ("%s abonné(s) %s (%s), pour un total de %s."
+               % (fmt_signed(a["cur28"]["subs"]), p["phrase"], a["cmp_subs"]["label"].lower(),
                   fmt_number(a["totals"]["subs"] if a["totals"] else None)))},
         {"q": "Résume les performances de ma dernière vidéo",
          "a": (("« %s » publiée le %s : %s vues, %s j'aime, %s commentaire(s)."
@@ -1385,10 +1413,11 @@ def analytics():
     ]
 
     return render_template("analytics.html", page="analytics",
-                           page_name="Données analytiques", c=c, a=a, yt=yt, tab=tab,
+                           page_name="Données analytiques", c=c, a=a, yt=yt, tab=tab, p=p,
                            chips=chips, top=vids[:10], videos=posted_videos(name, yt),
                            weekdays=weekday_stats(a["daily"]),
                            w7=window_sum(a["daily"], 7), w7p=window_sum(a["daily"], 7, 1),
+                           w28=window_sum(a["daily"], 28), w28p=window_sum(a["daily"], 28, 1),
                            w90=window_sum(a["daily"], 90), w90p=window_sum(a["daily"], 90, 1))
 
 

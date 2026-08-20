@@ -1250,6 +1250,48 @@ def home():
     return redirect(url_for("analytics", **request.args))
 
 
+def aggregate_analytics() -> dict:
+    """Statistiques toutes chaînes réunies : série quotidienne cumulée, KPI 28 j
+    agrégés (avec comparatif), totaux, et une ligne de synthèse par chaîne."""
+    merged = {}
+    cur = {"views": 0, "subs": 0, "watch": 0}
+    prev = {"views": 0, "subs": 0, "watch": 0}
+    tot = {"subs": 0, "views": 0, "videos": 0}
+    has_totals = False
+    rows = []
+    for nm in config["channels"]:
+        cc = card(nm)
+        aa = analytics_payload(nm, cc)
+        for d in aa["daily"]:
+            e = merged.setdefault(d["date"], {"date": d["date"], "views": 0, "watch": 0, "subs": 0})
+            e["views"] += d["views"]; e["watch"] += d["watch"]; e["subs"] += d["subs"]
+        for k in cur:
+            cur[k] += aa["cur28"][k]
+            prev[k] += aa["prev28"][k]
+        if aa["totals"]:
+            has_totals = True
+            for k in tot:
+                tot[k] += aa["totals"][k]
+        rows.append({"id": nm, "title": cc["title"] or nm, "connected": cc["connected"],
+                     "active": cc["active"], "pending": cc["pending"],
+                     "views28": aa["cur28"]["views"], "subs28": aa["cur28"]["subs"],
+                     "subs": aa["totals"]["subs"] if aa["totals"] else None})
+    rows.sort(key=lambda r: r["views28"], reverse=True)
+    return {
+        "daily": sorted(merged.values(), key=lambda e: e["date"]),
+        "cur28": cur, "prev28": prev,
+        "cmp_views": compare(cur["views"], prev["views"]),
+        "cmp_watch": compare(cur["watch"], prev["watch"]),
+        "cmp_subs": compare(cur["subs"], prev["subs"]),
+        "watch_hours": round(cur["watch"] / 60.0, 1),
+        "totals": tot if has_totals else None,
+        "rows": rows,
+        "n_channels": len(rows),
+        "n_connected": sum(1 for r in rows if r["connected"]),
+        "pending_total": sum(r["pending"] for r in rows),
+    }
+
+
 @app.route("/tableau")
 @login_required
 def dashboard():
@@ -1262,7 +1304,8 @@ def dashboard():
     posted = posted_videos(name, yt)
     queue = queued_videos(name)
     return render_template("dashboard.html", page="dashboard", page_name="Tableau de bord",
-                           c=c, a=a, yt=yt, last=(posted[0] if posted else None),
+                           c=c, a=a, agg=aggregate_analytics(), yt=yt,
+                           last=(posted[0] if posted else None),
                            posted=posted[:5], queue=queue[:5],
                            n_queue=len(queue), has_secrets=SECRETS_PATH.exists())
 

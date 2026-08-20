@@ -1,5 +1,16 @@
 {% extends "_studio.html" %}
 
+{# Icône de tendance (même dessin que sur la page analytics). #}
+{% macro trend(dir) %}
+  {% if dir == 'same' %}
+    <span class="trend same"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 13 5 5L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+  {% elif dir == 'up' %}
+    <span class="trend up"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l6 7h-4v9h-4v-9H6z"/></svg></span>
+  {% elif dir == 'down' %}
+    <span class="trend down"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20l-6-7h4V4h4v9h4z"/></svg></span>
+  {% endif %}
+{% endmacro %}
+
 {% block main %}
 <div class="page-head">
   <div>
@@ -45,6 +56,66 @@
 <div class="dash">
   {# ------------------------- colonne principale ------------------------- #}
   <div class="grid" style="gap:24px;">
+
+    {# -------- Toutes les chaînes réunies : KPI + courbe + comparatif -------- #}
+    <section class="card">
+      <div class="card-h"><h2>Vues des 28 derniers jours — toutes les chaînes</h2>
+        <span class="tiny muted">{{ agg.n_connected }}/{{ agg.n_channels }} chaîne(s) connectée(s)</span></div>
+      <div class="card-b">
+        <div class="kpi-band" style="margin-bottom:20px;">
+          <div class="cell sel">
+            <div class="l">Vues</div>
+            <div class="v">{{ agg.cur28.views|k }} {{ trend(agg.cmp_views.dir) }}</div>
+            <div class="c">{{ agg.cmp_views.label }}</div>
+          </div>
+          <div class="cell">
+            <div class="l">Durée de visionnage (heures)</div>
+            <div class="v">{{ agg.watch_hours|k }} {{ trend(agg.cmp_watch.dir) }}</div>
+            <div class="c">{{ agg.cmp_watch.label }}</div>
+          </div>
+          <div class="cell">
+            <div class="l">Abonnés</div>
+            <div class="v">{{ agg.cur28.subs|ksigned }} {{ trend(agg.cmp_subs.dir) }}</div>
+            <div class="c">{{ agg.cmp_subs.label }}</div>
+          </div>
+        </div>
+
+        {% if agg.daily %}
+          <div data-chart='{{ agg.daily|tojson }}' data-key="views" data-range="28" style="height:180px;"></div>
+        {% else %}
+          <div class="empty" style="padding:28px 12px;">
+            <div class="ic">📈</div>
+            <h3>Pas encore de données</h3>
+            <p class="tiny">Connecte au moins une chaîne pour voir les statistiques cumulées.</p>
+          </div>
+        {% endif %}
+
+        <table class="tbl" style="margin-top:18px;">
+          <thead><tr><th>Chaîne</th><th class="num">Vues · 28 j</th><th class="num">Abonnés · 28 j</th>
+                     <th class="num">Abonnés</th><th class="num">En file</th></tr></thead>
+          <tbody>
+            {% for r in agg.rows %}
+            <tr>
+              <td>
+                <a class="link" href="{{ url_for('analytics', c=r.id) }}">{{ r.title }}</a>
+                {% if not r.connected %}<span class="pill off" style="margin-left:8px;"><span class="dot"></span>non connectée</span>
+                {% elif not r.active %}<span class="pill warn" style="margin-left:8px;"><span class="dot"></span>en pause</span>{% endif %}
+              </td>
+              <td class="num">{{ r.views28|n }}</td>
+              <td class="num">{{ r.subs28|signed }}</td>
+              <td class="num">{{ r.subs|n if r.subs is not none else '—' }}</td>
+              <td class="num">{{ r.pending }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div class="tiny muted" style="margin-top:12px;">
+          Total : {{ agg.cur28.views|n }} vues et {{ agg.cur28.subs|signed }} abonné(s) sur 28 jours ·
+          {{ agg.totals.subs|n if agg.totals else '—' }} abonné(s) au compteur ·
+          {{ agg.pending_total }} vidéo(s) en file toutes chaînes.
+        </div>
+      </div>
+    </section>
 
     <section class="card">
       <div class="card-h"><h2>Dernière vidéo publiée</h2>
@@ -104,21 +175,6 @@
       </div>
     </section>
 
-    <section class="card">
-      <div class="card-h"><h2>Vues des 28 derniers jours</h2>
-        <a class="link tiny" href="{{ url_for('analytics', c=c.id) }}">Données analytiques</a></div>
-      <div class="card-b">
-        {% if a.daily %}
-          <div id="dashChart" data-chart='{{ a.daily|tojson }}' data-key="views" style="height:180px;"></div>
-        {% else %}
-          <div class="empty" style="padding:28px 12px;">
-            <div class="ic">📈</div>
-            <h3>Pas encore de données</h3>
-            <p class="tiny">{{ "L'API Analytics a 2 à 3 jours de décalage." if c.connected else "Connecte la chaîne pour voir ses statistiques." }}</p>
-          </div>
-        {% endif %}
-      </div>
-    </section>
   </div>
 
   {# ---------------------------- colonne droite ---------------------------- #}

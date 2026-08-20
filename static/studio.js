@@ -95,13 +95,6 @@
     if (p.length !== 3) return iso;
     return parseInt(p[2], 10) + " " + MOIS[parseInt(p[1], 10) - 1] + " " + p[0];
   }
-  function niceCeil(v) {
-    if (v <= 0) return 10;
-    var pow = Math.pow(10, Math.floor(Math.log10(v))), r = v / pow, m;
-    if (r <= 1) m = 1; else if (r <= 2) m = 2; else if (r <= 5) m = 5; else m = 10;
-    return m * pow;
-  }
-
   function kfmt(v) {
     var s2 = Math.abs(v);
     var out;
@@ -129,9 +122,10 @@
     var padL = 0, padR = 58, padT = 14, padB = 28;
     var iw = Math.max(10, w - padL - padR), ih = Math.max(10, h - padT - padB);
     var vals = data.map(function (d) { return d[key]; });
-    var max = niceCeil(Math.max.apply(null, vals) || 1);
+    // Façon Studio : le haut de grille est la valeur max réelle (« 3,8 k »), pas un arrondi.
+    var max = Math.max.apply(null, vals) || 1;
     var min = Math.min.apply(null, vals);
-    var lo = min < 0 ? -niceCeil(-min) : 0;
+    var lo = min < 0 ? min : 0;
     var span = (max - lo) || 1;
     var n = data.length;
     var x = function (i) { return padL + (n === 1 ? iw / 2 : iw * i / (n - 1)); };
@@ -149,8 +143,8 @@
       grid += '<line x1="0" x2="' + (padL + iw) + '" y1="' + gy.toFixed(1) + '" y2="' + gy.toFixed(1) + '" stroke="#303030" stroke-width="1"/>'
            + '<text x="' + (padL + iw + 12) + '" y="' + (gy + 4).toFixed(1) + '" fill="#aaa" font-size="12">' + kfmt(v) + "</text>";
     }
-    // Dates : jusqu'à 6 repères répartis sur la période.
-    var xt = "", want = Math.min(6, n), seen = {};
+    // Dates : jusqu'à 7 repères répartis sur la période (façon Studio).
+    var xt = "", want = Math.min(7, n), seen = {};
     for (var j = 0; j < want; j++) {
       var i2 = want === 1 ? 0 : Math.round(j * (n - 1) / (want - 1));
       if (seen[i2]) continue;

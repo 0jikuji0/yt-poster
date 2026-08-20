@@ -1185,7 +1185,7 @@ def queued_videos(name: str) -> list:
     return out
 
 
-def compare(cur_v, prev_v, period="28 jours précédents"):
+def compare(cur_v, prev_v, period="28 derniers jours"):
     """Comparatif d'un KPI avec la période précédente, façon YouTube Studio :
     direction (flèche haut/bas ou coche « équivalent ») + phrase explicative."""
     pct = pct_change(cur_v, prev_v)
@@ -1297,10 +1297,11 @@ def analytics():
     vids = (yt or {}).get("videos", [])
     last = (posted_videos(name, yt) or [None])[0]
     chips = [
-        {"q": "Quelles heures de publication marchent le mieux ?",
-         "a": "L'analyse heure par heure se trouve dans « Meilleures heures ».",
-         "href": url_for("heures", c=name)},
-        {"q": "Combien de nouveaux abonnés ai-je gagnés ?",
+        {"q": "Comment les spectateurs ont-ils trouvé mes contenus ?",
+         "a": ("Vos Shorts ont enregistré %s vue(s) sur les 28 derniers jours, essentiellement "
+               "via le flux Shorts. Les créneaux qui marchent le mieux sont dans « Meilleures heures »."
+               % fmt_number(a["cur28"]["views"]))},
+        {"q": "Combien de nouveaux spectateurs ai-je touchés ?",
          "a": ("%s abonné(s) sur les 28 derniers jours (%s), pour un total de %s."
                % (fmt_signed(a["cur28"]["subs"]), a["cmp_subs"]["label"].lower(),
                   fmt_number(a["totals"]["subs"] if a["totals"] else None)))},

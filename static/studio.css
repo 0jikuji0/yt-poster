@@ -453,7 +453,7 @@ textarea.inp { resize: vertical; }
 .pill-btn:hover { background: #3f3f3f; }
 
 .an-chipsrow { display: flex; align-items: center; gap: 16px; margin-top: 15px; }
-.an-chips { display: flex; flex-wrap: wrap; gap: 16px; max-width: 800px; }
+.an-chips { display: flex; flex-wrap: wrap; gap: 16px; max-width: 980px; }
 .chip {
   display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
   background: var(--bg-2); border: 1px solid var(--line); color: var(--txt);
@@ -479,7 +479,7 @@ textarea.inp { resize: vertical; }
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .an-tab:hover { color: var(--txt); }
-.an-tab.on { color: var(--txt); border-bottom-color: var(--txt); }
+.an-tab.on { color: var(--txt); border-bottom-color: var(--txt); font-weight: 500; }
 .an-range { text-align: right; padding-bottom: 10px; display: flex; align-items: center; gap: 14px; }
 .an-range .dates { font-size: 12px; color: var(--txt-2); }
 .an-range .lbl { font-size: 16px; color: var(--txt); }
@@ -490,7 +490,7 @@ textarea.inp { resize: vertical; }
 .an-card { border: 1px solid var(--line); border-radius: 12px; padding: 24px 14px 22px; }
 .an-headline {
   font-size: 24px; font-weight: 400; text-align: center; line-height: 1.3;
-  max-width: 660px; margin: 2px auto 42px;
+  max-width: 700px; margin: 2px auto 42px;
 }
 .kpi-band { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--bg-4); border-radius: 10px; overflow: hidden; }
 .kpi-band { background: #282828; }

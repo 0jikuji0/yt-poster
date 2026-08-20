@@ -16,7 +16,8 @@
 {# Page calquée sur « Données analytiques de la chaîne » de YouTube Studio. #}
 <div class="an-head">
   <h1 class="an-title">Données analytiques de la chaîne</h1>
-  <a class="pill-btn" href="{{ url_for('analytics', c=c.id, tab=tab, refresh=1) }}">↻ Actualiser</a>
+  {# Libellé « Mode avancé » comme dans Studio ; le lien force un rafraîchissement des données. #}
+  <a class="pill-btn" href="{{ url_for('analytics', c=c.id, tab=tab, refresh=1) }}">Mode avancé</a>
 </div>
 
 <div class="an-chipsrow">
@@ -233,14 +234,14 @@
     <div class="sep"></div>
     <div class="big">{{ a.totals.subs|n if a.totals else '—' }}</div>
     <div class="lbl">Abonnés</div>
-    <a class="pill-btn" style="margin-top:14px;" href="{{ url_for('analytics', c=c.id, tab='audience') }}">Voir l'audience</a>
+    <a class="pill-btn" style="margin-top:14px;" href="{{ url_for('analytics', c=c.id, tab='audience') }}">Voir en temps réel</a>
 
     <div class="sep"></div>
     {% set last48 = a.daily[-2:]|sum(attribute='views') if a.daily else 0 %}
     <div class="big">{{ last48|n }}</div>
-    <div class="lbl">Vues · 48 dernières heures connues</div>
+    <div class="lbl">Vues · Dernières 48 heures</div>
 
-    {% set bars = a.daily[-24:] %}
+    {% set bars = a.daily[-48:] %}
     {% set bmax = (bars|map(attribute='views')|max) if bars else 0 %}
     <div class="bars">
       {% for d in bars %}
@@ -248,7 +249,7 @@
               style="height:{{ ((d.views / bmax * 100) if bmax else 2)|round|int }}%;"></span>
       {% endfor %}
     </div>
-    <div class="axis"><span>-24 j</span><span>Maintenant</span></div>
+    <div class="axis"><span>-48 h</span><span>Maintenant</span></div>
 
     <div class="sep"></div>
     <div class="pophead"><span>Contenus populaires</span><span>Vues</span></div>

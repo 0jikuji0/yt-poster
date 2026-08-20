@@ -19,7 +19,8 @@
   <a class="pill-btn" href="{{ url_for('analytics', c=c.id, tab=tab, refresh=1) }}">↻ Actualiser</a>
 </div>
 
-<div class="an-chips">
+<div class="an-chipsrow">
+  <div class="an-chips">
   {% for ch in chips %}
     {% if ch.href %}
       <a class="chip" href="{{ ch.href }}">
@@ -33,16 +34,16 @@
       </button>
     {% endif %}
   {% endfor %}
+  </div>
+  <div class="an-kebab">
+    <a class="tb-icon" href="{{ url_for('parametres', c=c.id) }}" title="Paramètres de la chaîne">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+    </a>
+  </div>
 </div>
 {% for ch in chips %}
   {% if not ch.href %}<div class="an-answer" id="ans{{ loop.index }}" data-answer>{{ ch.a }}</div>{% endif %}
 {% endfor %}
-
-<div class="an-kebab">
-  <a class="tb-icon" href="{{ url_for('parametres', c=c.id) }}" title="Paramètres de la chaîne">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
-  </a>
-</div>
 
 <div class="an-tabsrow">
   <nav class="an-tabs">
@@ -91,7 +92,7 @@
       </h2>
 
       <div class="kpi-band">
-        <div class="cell">
+        <div class="cell sel">
           <div class="l">Vues</div>
           <div class="v">{{ a.cur28.views|k }} {{ trend(a.cmp_views.dir) }}</div>
           <div class="c">{{ a.cmp_views.label }}</div>

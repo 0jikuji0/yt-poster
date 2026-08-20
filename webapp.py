@@ -736,7 +736,7 @@ def setup():
             save_config()
             session["logged_in"] = True
             flash("Mot de passe créé. Bienvenue !", "ok")
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("home"))
     return render_template("setup.html")
 
 
@@ -747,7 +747,7 @@ def login():
     if request.method == "POST":
         if check_password_hash(config["password_hash"], request.form.get("password", "")):
             session["logged_in"] = True
-            return redirect(request.args.get("next") or url_for("dashboard"))
+            return redirect(request.args.get("next") or url_for("home"))
         flash("Mot de passe incorrect.", "error")
     return render_template("login.html")
 
@@ -1245,6 +1245,13 @@ def weekday_stats(daily):
 
 @app.route("/")
 @login_required
+def home():
+    """Page d'accueil : la page « Données analytiques » (le front calqué sur Studio)."""
+    return redirect(url_for("analytics", **request.args))
+
+
+@app.route("/tableau")
+@login_required
 def dashboard():
     if not config["channels"]:
         return redirect(url_for("chaines"))
@@ -1284,6 +1291,8 @@ def contenus():
 @app.route("/analytics")
 @login_required
 def analytics():
+    if not config["channels"]:
+        return redirect(url_for("chaines"))
     name = current_channel()
     c = card(name)
     force = request.args.get("refresh") == "1"

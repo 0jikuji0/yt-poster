@@ -2,14 +2,10 @@
    Alimentée par le context_processor inject_nav (cur, cur_id, nav_channels). #}
 <aside class="sidebar">
 
-  <div class="sb-channel">
+  <div class="sb-channel" id="chSwitch" title="Changer de chaîne">
     <div class="sb-ava {{ 'on' if cur.connected }}">{{ (cur_id or '?')[:1] }}</div>
     <div class="sb-chname">Votre chaîne</div>
     <div class="sb-chsub">{{ cur.title or cur_id }}</div>
-    <button class="sb-switch" id="chSwitch">
-      {{ cur_id }}
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
-    </button>
   </div>
 
   <div class="sb-picker" id="chPicker">
@@ -54,8 +50,9 @@
       Journal
     </a>
 
-    <div class="sb-sep"></div>
+  </nav>
 
+  <nav class="sb-nav bottom">
     <a class="sb-link {{ 'on' if page == 'chaines' }}" href="{{ url_for('chaines') }}">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16.5 11.2A2.8 2.8 0 1 0 16 5.7M17.5 18.6c.4-2.6-.6-4.3-2-5.2"/></svg>
       Toutes les chaînes

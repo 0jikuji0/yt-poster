@@ -24,7 +24,8 @@ ses métadonnées (titre, description, tags). Le script retient ce qui a déjà 
 - UI **façon YouTube Studio** (thème sombre, topbar + barre latérale), une chaîne à la
   fois (sélecteur sous l'avatar, paramètre `?c=<nom>` mémorisé en session) :
   - `templates/_studio.html` (coquille : topbar, modale « Créer ») + `templates/_nav.html` (barre latérale) ;
-  - pages : `dashboard`, `contenus`, `analytics`, `planification`, `heures`, `journal`,
+  - pages : `dashboard`, `contenus`, `analytics` (onglets Aperçu/Contenu/Audience/Tendances,
+    calquée sur la page « Données analytiques » de YouTube Studio), `planification`, `heures`, `journal`,
     `parametres`, `chaines`, `help_*` ; `login`/`setup` sont autonomes ;
   - `static/studio.css` (design system : variables de couleurs, cartes, tableaux, formulaires)
     et `static/studio.js` (menu, sélecteur de chaîne, modale, courbes SVG `[data-chart]`).

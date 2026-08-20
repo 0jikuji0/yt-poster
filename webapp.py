@@ -619,6 +619,7 @@ def inject_nav():
         "nav_channels": [card(n) for n in config["channels"]],
         "nav_has_secrets": SECRETS_PATH.exists(),
         "tz": config["timezone"],
+        "nav_alerts": sum(1 for ln in list(LOG_BUFFER)[:40] if "ERROR" in ln),
     }
 
 
@@ -642,6 +643,35 @@ def fmt_signed(v):
     except (TypeError, ValueError):
         return str(v)
     return ("+" if v >= 0 else "") + f"{v:,}".replace(",", "\u202f")
+
+
+@app.template_filter("k")
+def fmt_k(v):
+    """Abrège comme YouTube Studio : 46155 → « 46,2 k », 1250000 → « 1,2 M »."""
+    if v is None or v == "":
+        return "—"
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    sign = "-" if v < 0 else ""
+    v = abs(v)
+    if v >= 1_000_000:
+        out = f"{v / 1_000_000:.1f} M"
+    elif v >= 100_000:
+        out = f"{round(v / 1000)} k"
+    elif v >= 1000:
+        out = f"{v / 1000:.1f} k"
+    else:
+        out = f"{v:.1f}" if v and v != int(v) else str(int(v))
+    return sign + out.replace(".", ",").replace(",0 ", " ")
+
+
+@app.template_filter("ksigned")
+def fmt_k_signed(v):
+    if v is None:
+        return "—"
+    return ("+" if v >= 0 else "") + fmt_k(v)
 
 
 @app.template_filter("frdate")
@@ -763,8 +793,8 @@ def fetch_channel_totals(name: str, force: bool = False):
 
 
 def fetch_analytics_daily(name: str, force: bool = False):
-    """Vues + variation d'abonnés PAR JOUR via l'API YouTube Analytics.
-    Renvoie [{date, views, subs}] (subs = gagnés-perdus ce jour) ou None.
+    """Vues, durée de visionnage et variation d'abonnés PAR JOUR (YouTube Analytics).
+    Renvoie [{date, views, watch (minutes), subs}] (subs = gagnés-perdus ce jour) ou None.
     NB : l'API Analytics a ~2-3 jours de décalage (donnée officielle YouTube)."""
     now = datetime.now(TZ).timestamp()
     c = _ANALYTICS_CACHE.get(name)
@@ -780,10 +810,12 @@ def fetch_analytics_daily(name: str, force: bool = False):
         start = end - timedelta(days=ANALYTICS_DAYS)
         resp = ya.reports().query(
             ids="channel==MINE", startDate=start.isoformat(), endDate=end.isoformat(),
-            metrics="views,subscribersGained,subscribersLost", dimensions="day",
+            metrics="views,estimatedMinutesWatched,subscribersGained,subscribersLost",
+            dimensions="day",
         ).execute()
         rows = resp.get("rows", []) or []
-        out = [{"date": r[0], "views": int(r[1]), "subs": int(r[2]) - int(r[3])} for r in rows]
+        out = [{"date": r[0], "views": int(r[1]), "watch": int(r[2]),
+                "subs": int(r[3]) - int(r[4])} for r in rows]
         out.sort(key=lambda e: e["date"])
         _ANALYTICS_ERR.pop(name, None)
     except HttpError as e:
@@ -1091,12 +1123,13 @@ def _hours_analysis_fallback(name, ch, ws, we, out):
 def window_sum(daily, days, offset=0):
     """Somme vues/abonnés sur une fenêtre glissante. offset=1 → période précédente."""
     if not daily:
-        return {"views": 0, "subs": 0, "days": 0}
+        return {"views": 0, "subs": 0, "watch": 0, "days": 0}
     end = len(daily) - offset * days
     start = max(0, end - days)
     part = daily[max(0, start):max(0, end)]
     return {"views": sum(d["views"] for d in part),
-            "subs": sum(d["subs"] for d in part), "days": len(part)}
+            "subs": sum(d["subs"] for d in part),
+            "watch": sum(d.get("watch", 0) for d in part), "days": len(part)}
 
 
 def pct_change(cur_v, prev_v):
@@ -1152,12 +1185,26 @@ def queued_videos(name: str) -> list:
     return out
 
 
+def compare(cur_v, prev_v, period="28 jours précédents"):
+    """Comparatif d'un KPI avec la période précédente, façon YouTube Studio :
+    direction (flèche haut/bas ou coche « équivalent ») + phrase explicative."""
+    pct = pct_change(cur_v, prev_v)
+    if pct is None:
+        return {"pct": None, "dir": "flat", "label": "Pas de période précédente à comparer"}
+    if abs(pct) < 5:
+        return {"pct": pct, "dir": "same", "label": f"À peu près équivalent aux {period}"}
+    if pct > 0:
+        return {"pct": pct, "dir": "up", "label": f"{pct} % de plus que les {period}"}
+    return {"pct": pct, "dir": "down", "label": f"{abs(pct)} % de moins que les {period}"}
+
+
 def analytics_payload(name: str, c: dict, force: bool = False) -> dict:
     """Données chiffrées d'une chaîne : totaux, séries par jour, comparatifs."""
     totals = fetch_channel_totals(name, force) if c["connected"] else None
     daily = (fetch_analytics_daily(name, force) if c["connected"] else None) or []
     cur28 = window_sum(daily, 28)
     prev28 = window_sum(daily, 28, offset=1)
+    first = daily[-28:][0]["date"] if daily else None
     return {
         "totals": totals,
         "daily": daily,
@@ -1165,8 +1212,35 @@ def analytics_payload(name: str, c: dict, force: bool = False) -> dict:
         "prev28": prev28,
         "views_pct": pct_change(cur28["views"], prev28["views"]),
         "subs_pct": pct_change(cur28["subs"], prev28["subs"]),
+        "cmp_views": compare(cur28["views"], prev28["views"]),
+        "cmp_watch": compare(cur28["watch"], prev28["watch"]),
+        "cmp_subs": compare(cur28["subs"], prev28["subs"]),
+        "watch_hours": round(cur28["watch"] / 60.0, 1),
+        "period_start": first,
+        "period_end": daily[-1]["date"] if daily else None,
         "error": _ANALYTICS_ERR.get(name),
     }
+
+
+def weekday_stats(daily):
+    """Vues moyennes par jour de la semaine (onglet « Tendances »)."""
+    NAMES = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+    buckets = {i: [] for i in range(7)}
+    for d in daily[-84:]:
+        try:
+            wd = datetime.fromisoformat(d["date"]).weekday()
+        except (TypeError, ValueError):
+            continue
+        buckets[wd].append(d["views"])
+    rows = []
+    for i in range(7):
+        vals = buckets[i]
+        rows.append({"name": NAMES[i], "n": len(vals),
+                     "avg": round(sum(vals) / len(vals)) if vals else 0})
+    top = max((r["avg"] for r in rows), default=0) or 1
+    for r in rows:
+        r["pct"] = round(r["avg"] / top * 100)
+    return rows
 
 
 @app.route("/")
@@ -1212,11 +1286,37 @@ def contenus():
 def analytics():
     name = current_channel()
     c = card(name)
-    a = analytics_payload(name, c, force=request.args.get("refresh") == "1")
-    yt = fetch_youtube_stats(name, force=request.args.get("refresh") == "1") if c["connected"] else None
+    force = request.args.get("refresh") == "1"
+    a = analytics_payload(name, c, force=force)
+    yt = fetch_youtube_stats(name, force=force) if c["connected"] else None
+    tab = request.args.get("tab") or "apercu"
+    if tab not in ("apercu", "contenu", "audience", "tendances"):
+        tab = "apercu"
+
+    # Réponses des « puces » de suggestion (calculées ici, aucune IA).
+    vids = (yt or {}).get("videos", [])
+    last = (posted_videos(name, yt) or [None])[0]
+    chips = [
+        {"q": "Quelles heures de publication marchent le mieux ?",
+         "a": "L'analyse heure par heure se trouve dans « Meilleures heures ».",
+         "href": url_for("heures", c=name)},
+        {"q": "Combien de nouveaux abonnés ai-je gagnés ?",
+         "a": ("%s abonné(s) sur les 28 derniers jours (%s), pour un total de %s."
+               % (fmt_signed(a["cur28"]["subs"]), a["cmp_subs"]["label"].lower(),
+                  fmt_number(a["totals"]["subs"] if a["totals"] else None)))},
+        {"q": "Résume les performances de ma dernière vidéo",
+         "a": (("« %s » publiée le %s : %s vues, %s j'aime, %s commentaire(s)."
+                % (last["title"], fmt_frdate(last["date"]), fmt_number(last["views"]),
+                   fmt_number(last["likes"]), fmt_number(last["comments"])))
+               if last else "Aucune vidéo publiée pour l'instant.")},
+    ]
+
     return render_template("analytics.html", page="analytics",
-                           page_name="Données analytiques", c=c, a=a, yt=yt,
-                           top=(yt or {}).get("videos", [])[:5])
+                           page_name="Données analytiques", c=c, a=a, yt=yt, tab=tab,
+                           chips=chips, top=vids[:10], videos=posted_videos(name, yt),
+                           weekdays=weekday_stats(a["daily"]),
+                           w7=window_sum(a["daily"], 7), w7p=window_sum(a["daily"], 7, 1),
+                           w90=window_sum(a["daily"], 90), w90p=window_sum(a["daily"], 90, 1))
 
 
 @app.route("/planification")

@@ -14,6 +14,17 @@
     else document.body.classList.toggle("sb-collapsed");
   });
 
+  var sb = $("#tbSearch"), sbBtn = $("#tbSearchBtn");
+  if (sb && sbBtn) {
+    sbBtn.addEventListener("click", function (e) {
+      e.stopPropagation(); sb.classList.add("open");
+      var i = sb.querySelector("input"); if (i) i.focus();
+    });
+    document.addEventListener("click", function (e) {
+      if (!sb.contains(e.target) && !sb.querySelector("input").value) sb.classList.remove("open");
+    });
+  }
+
   var sw = $("#chSwitch"), picker = $("#chPicker");
   if (sw && picker) {
     sw.addEventListener("click", function (e) { e.stopPropagation(); picker.classList.toggle("open"); });
@@ -91,6 +102,16 @@
     return m * pow;
   }
 
+  function kfmt(v) {
+    var s2 = Math.abs(v);
+    var out;
+    if (s2 >= 1e6) out = (v / 1e6).toFixed(1) + " M";
+    else if (s2 >= 1e5) out = Math.round(v / 1000) + " k";
+    else if (s2 >= 1000) out = (v / 1000).toFixed(1) + " k";
+    else out = String(Math.round(v));
+    return out.replace(".", ",").replace(",0 ", " ");
+  }
+
   function renderChart(el) {
     var data;
     try { data = JSON.parse(el.getAttribute("data-chart") || "[]"); } catch (e) { data = []; }
@@ -100,12 +121,12 @@
     if (range !== "all") data = data.slice(-parseInt(range, 10));
     if (cum) {
       var acc = 0;
-      data = data.map(function (d) { acc += d[key]; var o = {}; o.date = d.date; o[key] = acc; return o; });
+      data = data.map(function (d) { acc += d[key]; var o = { date: d.date }; o[key] = acc; return o; });
     }
     if (!data.length) { el.innerHTML = '<div class="tiny muted" style="padding:20px 0;">Aucune donnée sur cette période.</div>'; return; }
 
     var w = el.clientWidth || 640, h = el.clientHeight || 200;
-    var padL = 0, padR = 52, padT = 12, padB = 26;
+    var padL = 0, padR = 58, padT = 14, padB = 28;
     var iw = Math.max(10, w - padL - padR), ih = Math.max(10, h - padT - padB);
     var vals = data.map(function (d) { return d[key]; });
     var max = niceCeil(Math.max.apply(null, vals) || 1);
@@ -121,21 +142,24 @@
     var col = COL[key] || COL.views;
     var uid = "g" + Math.random().toString(36).slice(2, 8);
 
-    // grille horizontale + libellés à droite
-    var grid = "", steps = 4;
-    for (var s = 0; s <= steps; s++) {
-      var v = lo + span * s / steps, gy = y(v);
-      grid += '<line x1="0" x2="' + (padL + iw) + '" y1="' + gy.toFixed(1) + '" y2="' + gy.toFixed(1) + '" stroke="#2a2a2a" stroke-width="1"/>'
-           + '<text x="' + (padL + iw + 8) + '" y="' + (gy + 4).toFixed(1) + '" fill="#aaa" font-size="11">' + grp(v) + "</text>";
+    // Grille : 3 paliers + la base, libellés abrégés à droite (façon Studio).
+    var grid = "", steps = 3;
+    for (var s2 = 0; s2 <= steps; s2++) {
+      var v = lo + span * s2 / steps, gy = y(v);
+      grid += '<line x1="0" x2="' + (padL + iw) + '" y1="' + gy.toFixed(1) + '" y2="' + gy.toFixed(1) + '" stroke="#303030" stroke-width="1"/>'
+           + '<text x="' + (padL + iw + 12) + '" y="' + (gy + 4).toFixed(1) + '" fill="#aaa" font-size="12">' + kfmt(v) + "</text>";
     }
-    // libellés de dates (début / milieu / fin)
-    var xt = "";
-    [0, Math.floor((n - 1) / 2), n - 1].filter(function (v, i, arr) { return arr.indexOf(v) === i; }).forEach(function (i) {
-      var d = data[i].date.split("-");
-      var anchor = i === 0 ? "start" : (i === n - 1 ? "end" : "middle");
-      xt += '<text x="' + x(i).toFixed(1) + '" y="' + (h - 6) + '" fill="#aaa" font-size="11" text-anchor="' + anchor + '">'
-          + (parseInt(d[2], 10) + " " + MOIS[parseInt(d[1], 10) - 1]) + "</text>";
-    });
+    // Dates : jusqu'à 6 repères répartis sur la période.
+    var xt = "", want = Math.min(6, n), seen = {};
+    for (var j = 0; j < want; j++) {
+      var i2 = want === 1 ? 0 : Math.round(j * (n - 1) / (want - 1));
+      if (seen[i2]) continue;
+      seen[i2] = 1;
+      var dd = data[i2].date.split("-");
+      var anchor = j === 0 ? "start" : (j === want - 1 ? "end" : "middle");
+      xt += '<text x="' + x(i2).toFixed(1) + '" y="' + (h - 8) + '" fill="#aaa" font-size="12" text-anchor="' + anchor + '">'
+          + (parseInt(dd[2], 10) + " " + MOIS[parseInt(dd[1], 10) - 1] + " " + dd[0]) + "</text>";
+    }
 
     var hits = data.map(function (d, i) {
       return '<rect x="' + (x(i) - iw / (2 * Math.max(1, n - 1))).toFixed(1) + '" y="0" width="'
@@ -144,7 +168,7 @@
 
     el.innerHTML = '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + " " + h + '" style="overflow:visible;display:block;">'
       + '<defs><linearGradient id="' + uid + '" x1="0" y1="0" x2="0" y2="1">'
-      + '<stop offset="0%" stop-color="' + col + '" stop-opacity=".28"/>'
+      + '<stop offset="0%" stop-color="' + col + '" stop-opacity=".22"/>'
       + '<stop offset="100%" stop-color="' + col + '" stop-opacity="0"/></linearGradient></defs>'
       + grid + xt
       + '<path d="' + area + '" fill="url(#' + uid + ')"/>'
@@ -155,7 +179,7 @@
 
     el._pts = data.map(function (d, i) { return { cx: x(i), cy: y(d[key]), v: d[key], date: d.date }; });
     el._col = col;
-    el._unit = key === "subs" ? "abonnés" : "vues";
+    el._unit = key === "subs" ? "abonnés" : (key === "watch" ? "minutes" : "vues");
   }
 
   var tip = document.createElement("div");
@@ -189,6 +213,19 @@
       if (hl) hl.style.display = "none";
     });
   }
+
+  // Puces de suggestion : déplient la réponse calculée côté serveur.
+  document.addEventListener("click", function (e) {
+    var chip = e.target.closest ? e.target.closest("[data-chip]") : null;
+    if (!chip) return;
+    var box = document.getElementById(chip.getAttribute("data-chip"));
+    if (!box) return;
+    var open = box.style.display === "block";
+    $$("[data-answer]").forEach(function (b) { b.style.display = "none"; });
+    $$("[data-chip]").forEach(function (b) { b.classList.remove("on"); });
+    box.style.display = open ? "none" : "block";
+    chip.classList.toggle("on", !open);
+  });
 
   function renderAll() { $$("[data-chart]").forEach(renderChart); }
   renderAll();

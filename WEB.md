@@ -56,7 +56,7 @@ l'URL `?c=<nom>` fonctionne partout).
 |---|---|
 | **Tableau de bord** (`/`) | dernière vidéo publiée, file d'attente, créneaux du jour, stats de la chaîne |
 | **Contenus** (`/contenus`) | file d'attente (suppression multiple) et vidéos publiées avec leurs vues |
-| **Données analytiques** (`/analytics`) | vues/abonnés par jour, comparatif 28 j, contenus populaires |
+| **Données analytiques** (`/analytics`) | 4 onglets (Aperçu, Contenu, Audience, Tendances) : vues / durée de visionnage / abonnés sur 28 j avec comparatif, courbe, carte « Temps réel », contenus populaires |
 | **Planification** (`/planification`) | cadence, fenêtre horaire, heures fixes, créneaux du jour, cadence des autres chaînes |
 | **Meilleures heures** (`/heures`) | quelles heures de publication rapportent des vues |
 | **Journal** (`/journal`) | activité du planificateur (uploads, erreurs 403…) |

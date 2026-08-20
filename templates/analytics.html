@@ -1,14 +1,63 @@
 {% extends "_studio.html" %}
+{% block pagecls %}an-page{% endblock %}
+
+{# Icône de tendance de la bande de KPI : coche verte, flèche haut ou bas. #}
+{% macro trend(dir) %}
+  {% if dir == 'same' %}
+    <span class="trend same"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 13 5 5L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+  {% elif dir == 'up' %}
+    <span class="trend up"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l6 7h-4v9h-4v-9H6z"/></svg></span>
+  {% elif dir == 'down' %}
+    <span class="trend down"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20l-6-7h4V4h4v9h4z"/></svg></span>
+  {% endif %}
+{% endmacro %}
 
 {% block main %}
-<div class="page-head">
-  <div>
-    <h1 class="page-title">Données analytiques de la chaîne</h1>
-    <div class="page-sub">{{ c.title or c.id }} — YouTube Analytics (2 à 3 jours de décalage)</div>
-  </div>
-  <div style="display:flex;gap:10px;">
-    <a class="btn ghost" href="{{ url_for('analytics', c=c.id, refresh=1) }}">↻ Actualiser</a>
-    <a class="btn" href="{{ url_for('heures', c=c.id) }}">Meilleures heures</a>
+{# Page calquée sur « Données analytiques de la chaîne » de YouTube Studio. #}
+<div class="an-head">
+  <h1 class="an-title">Données analytiques de la chaîne</h1>
+  <a class="pill-btn" href="{{ url_for('analytics', c=c.id, tab=tab, refresh=1) }}">↻ Actualiser</a>
+</div>
+
+<div class="an-chips">
+  {% for ch in chips %}
+    {% if ch.href %}
+      <a class="chip" href="{{ ch.href }}">
+        <svg class="spark" width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9L12 2.5zM19 15l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9L19 15z"/></svg>
+        {{ ch.q }}
+      </a>
+    {% else %}
+      <button class="chip" data-chip="ans{{ loop.index }}">
+        <svg class="spark" width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9L12 2.5zM19 15l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9L19 15z"/></svg>
+        {{ ch.q }}
+      </button>
+    {% endif %}
+  {% endfor %}
+</div>
+{% for ch in chips %}
+  {% if not ch.href %}<div class="an-answer" id="ans{{ loop.index }}" data-answer>{{ ch.a }}</div>{% endif %}
+{% endfor %}
+
+<div class="an-kebab">
+  <a class="tb-icon" href="{{ url_for('parametres', c=c.id) }}" title="Paramètres de la chaîne">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+  </a>
+</div>
+
+<div class="an-tabsrow">
+  <nav class="an-tabs">
+    {% for key, label in [('apercu','Aperçu'),('contenu','Contenu'),('audience','Audience'),('tendances','Tendances')] %}
+      <a class="an-tab {{ 'on' if tab == key }}" href="{{ url_for('analytics', c=c.id, tab=key) }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <div class="an-range">
+    <div>
+      <div class="dates">
+        {% if a.period_start %}{{ a.period_start|frdate }} – {{ a.period_end|frdate }}{% else %}Aucune donnée{% endif %}
+      </div>
+      <div class="lbl">28 derniers jours</div>
+    </div>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:var(--txt-2);"><path d="M7 10l5 5 5-5z"/></svg>
   </div>
 </div>
 
@@ -28,154 +77,190 @@
 </div>
 {% endif %}
 
-<div class="dash">
-  {# ------------------------------ colonne principale ------------------------------ #}
+<div class="an-grid">
   <div>
-    <div class="card">
-      <div class="card-b">
-        <h2 style="font-size:22px;text-align:center;line-height:1.35;margin-bottom:22px;">
-          {% if a.cur28.views %}
-            Ta chaîne a enregistré <b>{{ a.cur28.views|n }}</b> vues au cours des 28 derniers jours
-          {% else %}
-            Pas encore de vues enregistrées sur les 28 derniers jours
-          {% endif %}
-        </h2>
+    {# ------------------------------- Aperçu ------------------------------- #}
+    {% if tab == 'apercu' %}
+    <section class="an-card">
+      <h2 class="an-headline">
+        {% if a.cur28.views %}
+          Votre chaîne a enregistré {{ a.cur28.views|n }} vues au cours des 28 derniers jours
+        {% else %}
+          Aucune vue enregistrée au cours des 28 derniers jours
+        {% endif %}
+      </h2>
 
-        <div class="kpis">
-          <div class="kpi">
-            <div class="l">Vues</div>
-            <div class="v">{{ a.cur28.views|n }}</div>
-            <div class="c">
-              {% if a.views_pct is not none %}
-                <span class="{{ 'up' if a.views_pct >= 0 else 'down' }}">{{ a.views_pct|signed }} %</span> vs 28 j précédents
-              {% else %}—{% endif %}
-            </div>
-          </div>
-          <div class="kpi">
-            <div class="l">Abonnés gagnés</div>
-            <div class="v">{{ a.cur28.subs|signed }}</div>
-            <div class="c">
-              {% if a.subs_pct is not none %}
-                <span class="{{ 'up' if a.subs_pct >= 0 else 'down' }}">{{ a.subs_pct|signed }} %</span> vs 28 j précédents
-              {% else %}—{% endif %}
-            </div>
-          </div>
-          <div class="kpi">
-            <div class="l">Vues totales</div>
-            <div class="v">{{ a.totals.views|n if a.totals else '—' }}</div>
-            <div class="c">{{ a.totals.videos|n if a.totals else c.posted }} vidéo(s) en ligne</div>
-          </div>
+      <div class="kpi-band">
+        <div class="cell">
+          <div class="l">Vues</div>
+          <div class="v">{{ a.cur28.views|k }} {{ trend(a.cmp_views.dir) }}</div>
+          <div class="c">{{ a.cmp_views.label }}</div>
         </div>
-
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 10px;flex-wrap:wrap;"
-             data-charts="rangeLbl">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="width:14px;height:3px;border-radius:2px;background:var(--chart);display:inline-block;"></span>
-            <b style="font-weight:500;">Vues</b>
-            <span class="tiny muted" id="rangeLbl">28 jours</span>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <div class="seg">
-              <button data-set-mode="day" class="on">Par jour</button>
-              <button data-set-mode="cum">Cumulé</button>
-            </div>
-            <div class="seg">
-              <button data-set-range="7">7 j</button>
-              <button data-set-range="28" class="on">28 j</button>
-              <button data-set-range="90">3 mois</button>
-              <button data-set-range="all">Tout</button>
-            </div>
-          </div>
+        <div class="cell">
+          <div class="l">Durée de visionnage (heures)</div>
+          <div class="v">{{ a.watch_hours|k }} {{ trend(a.cmp_watch.dir) }}</div>
+          <div class="c">{{ a.cmp_watch.label }}</div>
         </div>
-        <div data-chart='{{ a.daily|tojson }}' data-key="views" data-range="28" style="height:230px;"></div>
-
-        <div style="display:flex;align-items:center;gap:10px;margin:28px 0 10px;">
-          <span style="width:14px;height:3px;border-radius:2px;background:var(--chart-2);display:inline-block;"></span>
-          <b style="font-weight:500;">Abonnés gagnés / perdus</b>
+        <div class="cell">
+          <div class="l">Abonnés</div>
+          <div class="v">{{ a.cur28.subs|ksigned }} {{ trend(a.cmp_subs.dir) }}</div>
+          <div class="c">{{ a.cmp_subs.label }}</div>
         </div>
-        <div data-chart='{{ a.daily|tojson }}' data-key="subs" data-range="28" style="height:180px;"></div>
       </div>
-    </div>
 
-    <div class="card" style="margin-top:24px;">
-      <div class="card-h"><h2>Jour par jour</h2>
-        <span class="tiny muted">{{ a.daily|length }} jour(s) de données</span></div>
-      {% if a.daily %}
+      <div class="an-plot" data-chart='{{ a.daily|tojson }}' data-key="views" data-range="28"></div>
+      <a class="pill-btn" href="{{ url_for('analytics', c=c.id, tab='contenu') }}">Voir plus</a>
+    </section>
+
+    <div class="an-hr"></div>
+    <h2 class="an-sub">Vos contenus populaires pour cette période</h2>
+    {% if top %}
+    <table class="tbl">
+      <thead><tr><th>Vidéo</th><th class="num">Vues</th><th class="num">J'aime</th><th class="num">Commentaires</th></tr></thead>
+      <tbody>
+        {% for v in top[:5] %}
+        <tr>
+          <td>
+            <div class="vrow">
+              <span class="thumb"><img onerror="this.style.display='none'" src="https://i.ytimg.com/vi/{{ v.id }}/default.jpg" alt="" style="width:100%;height:100%;object-fit:cover;"></span>
+              <span style="min-width:0;"><a class="t" href="{{ v.url }}" target="_blank" rel="noopener">{{ v.title }}</a></span>
+            </div>
+          </td>
+          <td class="num">{{ v.views|n }}</td>
+          <td class="num">{{ v.likes|n }}</td>
+          <td class="num">{{ v.comments|n }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty"><div class="ic">🎬</div><h3>Aucune vidéo publiée</h3>
+      <p class="tiny">{{ "Les vidéos publiées par le planificateur apparaîtront ici." if c.connected else "Connecte la chaîne pour voir ses contenus." }}</p></div>
+    {% endif %}
+
+    {# ------------------------------ Contenu ------------------------------ #}
+    {% elif tab == 'contenu' %}
+    <section class="an-card">
+      <h2 class="an-headline">{{ videos|length }} vidéo(s) publiée(s) par clipstudio</h2>
       <table class="tbl">
-        <thead><tr><th>Date</th><th class="num">Vues</th><th class="num">Abonnés Δ</th></tr></thead>
+        <thead><tr><th>Vidéo</th><th>Publiée le</th><th class="num">Vues</th><th class="num">J'aime</th><th class="num">Commentaires</th></tr></thead>
         <tbody>
-          {% for d in a.daily[-30:]|reverse %}
+          {% for v in videos %}
           <tr>
-            <td class="muted">{{ d.date|frdate }}</td>
-            <td class="num">{{ d.views|n }}</td>
-            <td class="num {{ 'up' if d.subs > 0 else ('down' if d.subs < 0 else 'muted') }}">{{ d.subs|signed }}</td>
+            <td>
+              <div class="vrow">
+                <span class="thumb">{% if v.video_id %}<img onerror="this.style.display='none'" src="https://i.ytimg.com/vi/{{ v.video_id }}/default.jpg" alt="" style="width:100%;height:100%;object-fit:cover;">{% else %}▶{% endif %}</span>
+                <span style="min-width:0;">
+                  <a class="t" href="{{ v.url or '#' }}" target="_blank" rel="noopener">{{ v.title }}</a>
+                  <span class="d mono">{{ v.file }}</span>
+                </span>
+              </div>
+            </td>
+            <td class="muted">{{ v.date|frdate }}</td>
+            <td class="num">{{ v.views|n }}</td>
+            <td class="num">{{ v.likes|n }}</td>
+            <td class="num">{{ v.comments|n }}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      {% else %}
-      <div class="empty"><div class="ic">📈</div><h3>Aucune donnée</h3>
-        <p class="tiny">Les statistiques apparaissent 2 à 3 jours après la publication.</p></div>
-      {% endif %}
-    </div>
-  </div>
-
-  {# --------------------------------- colonne droite --------------------------------- #}
-  <aside class="grid" style="gap:24px;">
-    <section class="card">
-      <div class="card-h"><h2>Temps réel</h2></div>
-      <div class="card-b">
-        <div class="stat-big">{{ a.totals.subs|n if a.totals else '—' }}</div>
-        <div class="stat-lbl">Abonnés</div>
-
-        <div style="height:1px;background:var(--line);margin:18px 0;"></div>
-
-        {% set last48 = a.daily[-2:]|sum(attribute='views') if a.daily else 0 %}
-        <div class="stat-big" style="font-size:30px;">{{ last48|n }}</div>
-        <div class="stat-lbl">Vues · 2 derniers jours connus</div>
-
-        <div style="display:flex;align-items:flex-end;gap:3px;height:56px;margin-top:16px;">
-          {% set bars = a.daily[-14:] %}
-          {% set bmax = (bars|map(attribute='views')|max) if bars else 0 %}
-          {% for d in bars %}
-            <span title="{{ d.date }} · {{ d.views }} vues"
-                  style="flex:1;border-radius:2px 2px 0 0;background:var(--chart);
-                         height:{{ ((d.views / bmax * 100) if bmax else 2)|round|int }}%;min-height:2px;"></span>
-          {% endfor %}
-        </div>
-        <div style="display:flex;justify-content:space-between;" class="tiny muted">
-          <span>-14 j</span><span>Dernier jour</span>
-        </div>
-      </div>
+      {% if not videos %}<div class="empty"><div class="ic">🎬</div><h3>Aucune vidéo publiée</h3></div>{% endif %}
     </section>
 
-    <section class="card">
-      <div class="card-h"><h2>Contenus populaires</h2>
-        <a class="link tiny" href="{{ url_for('contenus', c=c.id, tab='posted') }}">Tout voir</a></div>
-      <div class="card-b">
-        {% if top %}
-        <table class="tbl" style="margin:-8px 0;">
-          <tbody>
-          {% for v in top %}
+    {# ------------------------------ Audience ------------------------------ #}
+    {% elif tab == 'audience' %}
+    <section class="an-card">
+      <h2 class="an-headline">
+        {% if a.cur28.subs %}Votre chaîne a gagné {{ a.cur28.subs|signed }} abonnés au cours des 28 derniers jours
+        {% else %}Aucun abonné gagné au cours des 28 derniers jours{% endif %}
+      </h2>
+      <div class="kpi-band">
+        <div class="cell"><div class="l">Abonnés (total)</div>
+          <div class="v">{{ a.totals.subs|k if a.totals else '—' }}</div>
+          <div class="c">valeur en direct</div></div>
+        <div class="cell"><div class="l">Abonnés · 28 j</div>
+          <div class="v">{{ a.cur28.subs|ksigned }} {{ trend(a.cmp_subs.dir) }}</div>
+          <div class="c">{{ a.cmp_subs.label }}</div></div>
+        <div class="cell"><div class="l">Vues par abonné</div>
+          <div class="v">{{ (a.cur28.views / a.totals.subs)|round(1) if a.totals and a.totals.subs else '—' }}</div>
+          <div class="c">sur les 28 derniers jours</div></div>
+      </div>
+      <div class="an-plot" data-chart='{{ a.daily|tojson }}' data-key="subs" data-range="28"></div>
+      <a class="pill-btn" href="{{ url_for('heures', c=c.id) }}">Quand publier pour toucher plus de monde ?</a>
+    </section>
+
+    {# ----------------------------- Tendances ----------------------------- #}
+    {% else %}
+    <section class="an-card">
+      <h2 class="an-headline">Comparatif des périodes</h2>
+      <table class="tbl">
+        <thead><tr><th>Période</th><th class="num">Vues</th><th class="num">Période précédente</th><th class="num">Écart</th><th class="num">Abonnés</th></tr></thead>
+        <tbody>
+          {% for lbl, cw, pw in [('7 derniers jours', w7, w7p), ('28 derniers jours', a.cur28, a.prev28), ('90 derniers jours', w90, w90p)] %}
           <tr>
-            <td style="padding-left:0;">
-              <div class="vrow">
-                <span class="thumb" style="width:48px;height:28px;">
-                  <img onerror="this.style.display='none'" src="https://i.ytimg.com/vi/{{ v.id }}/default.jpg" alt="" style="width:100%;height:100%;object-fit:cover;">
-                </span>
-                <a class="t" href="{{ v.url }}" target="_blank" rel="noopener" style="max-width:160px;">{{ v.title }}</a>
-              </div>
+            <td>{{ lbl }}</td>
+            <td class="num">{{ cw.views|n }}</td>
+            <td class="num muted">{{ pw.views|n }}</td>
+            <td class="num">
+              {% set p = ((cw.views - pw.views) / pw.views * 100)|round|int if pw.views else None %}
+              {% if p is not none %}<span class="{{ 'up' if p >= 0 else 'down' }}">{{ p|signed }} %</span>{% else %}—{% endif %}
             </td>
-            <td class="num" style="padding-right:0;">{{ v.views|n }}</td>
+            <td class="num">{{ cw.subs|signed }}</td>
           </tr>
           {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        <div class="tiny muted">{{ "Aucune vidéo publiée pour l'instant." if c.connected else "Connecte la chaîne pour voir tes meilleures vidéos." }}</div>
-        {% endif %}
-      </div>
+        </tbody>
+      </table>
+
+      <h3 style="font-size:15px;font-weight:500;margin:30px 0 12px;">Vues moyennes par jour de la semaine</h3>
+      {% for d in weekdays %}
+        <div style="display:grid;grid-template-columns:96px 1fr 90px;align-items:center;gap:14px;margin:9px 0;font-size:13px;">
+          <span class="muted" style="text-transform:capitalize;">{{ d.name }}</span>
+          <span class="bar"><span style="width:{{ d.pct }}%;"></span></span>
+          <span class="num" style="text-align:right;">{{ d.avg|n }} vues</span>
+        </div>
+      {% endfor %}
+      <div class="tiny muted" style="margin-top:12px;">Moyenne sur les 12 dernières semaines de données.</div>
     </section>
+    {% endif %}
+  </div>
+
+  {# --------------------------- Colonne « Temps réel » --------------------------- #}
+  <aside class="rt">
+    <h2>Temps réel</h2>
+    <div class="live"><span class="d"></span> Mise à jour en direct</div>
+
+    <div class="sep"></div>
+    <div class="big">{{ a.totals.subs|n if a.totals else '—' }}</div>
+    <div class="lbl">Abonnés</div>
+    <a class="pill-btn" style="margin-top:14px;" href="{{ url_for('analytics', c=c.id, tab='audience') }}">Voir l'audience</a>
+
+    <div class="sep"></div>
+    {% set last48 = a.daily[-2:]|sum(attribute='views') if a.daily else 0 %}
+    <div class="big">{{ last48|n }}</div>
+    <div class="lbl">Vues · 48 dernières heures connues</div>
+
+    {% set bars = a.daily[-24:] %}
+    {% set bmax = (bars|map(attribute='views')|max) if bars else 0 %}
+    <div class="bars">
+      {% for d in bars %}
+        <span title="{{ d.date }} · {{ d.views }} vues"
+              style="height:{{ ((d.views / bmax * 100) if bmax else 2)|round|int }}%;"></span>
+      {% endfor %}
+    </div>
+    <div class="axis"><span>-24 j</span><span>Maintenant</span></div>
+
+    <div class="sep"></div>
+    <div class="pophead"><span>Contenus populaires</span><span>Vues</span></div>
+    {% for v in top[:3] %}
+      <div class="poprow">
+        <span class="th"><img onerror="this.style.display='none'" src="https://i.ytimg.com/vi/{{ v.id }}/default.jpg" alt="" style="width:100%;height:100%;object-fit:cover;"></span>
+        <a class="t" href="{{ v.url }}" target="_blank" rel="noopener">{{ v.title }}</a>
+        <span class="n">{{ v.views|n }}</span>
+      </div>
+    {% else %}
+      <div class="tiny muted">{{ "Aucune vidéo publiée." if c.connected else "Chaîne non connectée." }}</div>
+    {% endfor %}
+    <a class="pill-btn" style="margin-top:16px;" href="{{ url_for('contenus', c=c.id, tab='posted') }}">Voir plus</a>
   </aside>
 </div>
 {% endblock %}

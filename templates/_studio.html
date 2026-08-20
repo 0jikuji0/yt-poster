@@ -20,21 +20,33 @@
     <span class="play"><i></i></span><b>clipstudio</b>
   </a>
 
-  <div class="tb-search">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <form method="get" action="{{ url_for('contenus') }}">
-      <input type="search" name="q" value="{{ request.args.get('q','') }}" placeholder="Rechercher dans les vidéos de la chaîne">
-      <input type="hidden" name="c" value="{{ cur_id }}">
-    </form>
-  </div>
-
   <div class="tb-right">
+    <div class="tb-search" id="tbSearch">
+      <button class="tb-icon" id="tbSearchBtn" title="Rechercher une vidéo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9" stroke-linecap="round"/></svg>
+      </button>
+      <form method="get" action="{{ url_for('contenus') }}">
+        <input type="search" name="q" value="{{ request.args.get('q','') }}" placeholder="Rechercher dans les vidéos">
+        <input type="hidden" name="c" value="{{ cur_id }}">
+      </form>
+    </div>
+
     <a class="tb-icon" href="{{ url_for('help_index') }}" title="Aide">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.7.6-.7 1.1v.5"/><circle cx="12" cy="16.5" r=".9" fill="currentColor" stroke="none"/></svg>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.7.6-.7 1.1v.5"/><circle cx="12" cy="16.5" r=".9" fill="currentColor" stroke="none"/></svg>
     </a>
-    <a class="tb-icon" href="{{ url_for('journal') }}" title="Journal">
+    <a class="tb-icon" href="{{ url_for('journal', c=cur_id) }}" title="Journal">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 16v-5a6 6 0 1 0-12 0v5l-1.5 2h15L18 16z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+      {% if nav_alerts %}<span class="dot"></span>{% endif %}
     </a>
+
+    <form method="post" action="{{ url_for('post_now', name=cur_id) }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <button class="tb-ask" {{ 'disabled' if not cur.pending or not cur.connected }}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9L12 2.5zM19 15l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9L19 15z"/></svg>
+        Poster maintenant
+      </button>
+    </form>
+
     <button class="tb-create" id="btnCreate">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 3.5V7l-4 3.5z"/></svg>
       Créer
@@ -51,7 +63,7 @@
       {% for category, msg in messages %}<div class="flash {{ category }}">{{ msg }}</div>{% endfor %}
     {% endwith %}
   </div>
-  <div class="page">{% block main %}{% endblock %}</div>
+  <div class="{% block pagecls %}page{% endblock %}">{% block main %}{% endblock %}</div>
 </div>
 
 {# ---- Modale « Créer » : dépôt de vidéos dans la chaîne courante ---- #}

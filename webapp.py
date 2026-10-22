@@ -792,6 +792,14 @@ def admin_required(f):
     return wrapper
 
 
+@app.errorhandler(403)
+def forbidden(_e):
+    """Action réservée à l'admin : message clair au lieu de la page « Forbidden »."""
+    flash("Cette action est réservée à l'administrateur du site.", "error")
+    ref = request.referrer or ""
+    return redirect(ref if ref.startswith(request.host_url) else url_for("home"))
+
+
 USERNAME_RE = re.compile(r"^[a-z0-9._-]{2,32}$")
 MIN_PASSWORD = 8
 

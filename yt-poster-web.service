@@ -18,7 +18,7 @@ User=ubuntu
 WorkingDirectory=/home/ubuntu/yt-poster
 Environment=PORT=8080
 # base_url DOIT correspondre à l'URL publique (utilisée pour la redirection OAuth)
-Environment=BASE_URL=https://yt.etiodocplateforme.fr
+Environment=BASE_URL=https://yt.mondomaine.fr
 ExecStart=/home/ubuntu/yt-poster/.venv/bin/python /home/ubuntu/yt-poster/webapp.py
 Restart=always
 RestartSec=5

@@ -11,7 +11,12 @@
 #
 # Le service écoute en HTTP sur le port 8080 du conteneur. Mets ton reverse-proxy
 # (Nginx Proxy Manager / Traefik / Caddy) devant pour le HTTPS sur
-# https://yt.etiodocplateforme.fr  → voir la section "ports" / "labels" ci-dessous.
+# l'URL publique définie dans BASE_URL → voir la section "ports" ci-dessous.
+#
+# Variables à définir (fichier .env à côté de ce fichier, ou « Environment variables »
+# de la stack Portainer) :
+#   BASE_URL  URL publique HTTPS, ex. https://yt.mondomaine.fr (= URI OAuth sans /oauth/callback)
+#   SSH_HOST  facultatif, ex. debian@1.2.3.4 — affiché dans les commandes de la page d'aide
 
 services:
   yt-poster:
@@ -21,7 +26,8 @@ services:
     restart: unless-stopped
     environment:
       YT_DATA_DIR: /data
-      BASE_URL: https://yt.etiodocplateforme.fr
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      SSH_HOST: ${SSH_HOST:-}
       TZ: Europe/Paris
     volumes:
       - yt_data:/data

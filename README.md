@@ -1,5 +1,7 @@
 # yt-shorts-poster
 
+> 👉 **Tu veux l'installer pour tes propres chaînes ?** Suis [INSTALL.md](INSTALL.md).
+
 Petit outil en ligne de commande qui **poste automatiquement toutes les vidéos d'un dossier
 sur YouTube en Shorts**, via l'API officielle YouTube Data v3.
 

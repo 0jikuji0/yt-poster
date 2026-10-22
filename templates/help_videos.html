@@ -105,7 +105,7 @@
         <p>Depuis ta machine, copie le dossier de vidéos vers le serveur. La source peut être un
           dossier local ou un montage cloud (ex. Proton Drive) — rsync télécharge les fichiers
           « en ligne seulement » à la volée.</p>
-        <pre><code>rsync -avP &lt;dossier&gt;/ debian@51.77.159.241:/home/debian/&lt;dossier&gt;/</code></pre>
+        <pre><code>rsync -avP &lt;dossier&gt;/ {{ ssh_host }}:~/&lt;dossier&gt;/</code></pre>
         <p class="exts">Le serveur demande un mot de passe SSH (accès public, sans VPN).</p>
       </div>
     </div>
@@ -115,14 +115,14 @@
       <div>
         <h3>Copie dans le conteneur (docker cp)</h3>
         <p>Connecte-toi au serveur (<code>ssh -t</code> pour le mot de passe sudo) :</p>
-        <pre><code>ssh -t debian@51.77.159.241</code></pre>
+        <pre><code>ssh -t {{ ssh_host }}</code></pre>
         <p>Puis, selon la chaîne visée, colle le bloc correspondant (il crée le dossier si besoin
           et copie le contenu du dépôt dedans) :</p>
 
         {% for ch in channel_names %}
           <p class="chtitle">→ Chaîne <b>{{ ch }}</b></p>
           <pre><code>sudo docker exec yt-poster mkdir -p /data/channels/{{ ch }}
-sudo docker cp /home/debian/&lt;dossier&gt;/. yt-poster:/data/channels/{{ ch }}/</code></pre>
+sudo docker cp ~/&lt;dossier&gt;/. yt-poster:/data/channels/{{ ch }}/</code></pre>
         {% endfor %}
 
         <div class="callout">Remplace <code>&lt;dossier&gt;</code> par le nom du dossier envoyé à
@@ -140,7 +140,7 @@ sudo docker cp /home/debian/&lt;dossier&gt;/. yt-poster:/data/channels/{{ ch }}/
         <pre><code>{% for ch in channel_names %}sudo docker exec yt-poster ls /data/channels/{{ ch }}/ | wc -l
 {% endfor %}</code></pre>
         <p>Puis supprime le dépôt temporaire du serveur :</p>
-        <pre><code>rm -rf /home/debian/&lt;dossier&gt;</code></pre>
+        <pre><code>rm -rf ~/&lt;dossier&gt;</code></pre>
         <div class="callout ok">Les vidéos apparaissent dans la file de la chaîne au prochain
           rafraîchissement de la page. Le planificateur les poste ensuite tout seul (ou bouton
           « Poster maintenant »). Aucune action supplémentaire n'est requise.</div>

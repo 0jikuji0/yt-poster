@@ -88,7 +88,7 @@ journalctl -u yt-poster-web -f      # suivre les logs
 
 Le serveur Python (waitress) écoute en HTTP sur le port 8080 ; un reverse-proxy gère
 le TLS. Le plus simple : **Caddy** (certificat Let's Encrypt automatique). Voir
-`Caddyfile.example`. `base_url` doit être l'URL HTTPS publique (`https://yt.etiodocplateforme.fr`),
+`Caddyfile.example`. `base_url` doit être l'URL HTTPS publique (ex. `https://yt.mondomaine.fr`),
 identique à l'URI de redirection OAuth.
 
 > waitress est inclus dans requirements.txt : `webapp.py` l'utilise automatiquement
@@ -96,8 +96,8 @@ identique à l'URI de redirection OAuth.
 
 ### ⚠️ Changement de domaine = reconnexion des chaînes
 
-L'URI de redirection OAuth dépend du domaine. Pour la prod sur `yt.etiodocplateforme.fr`, il
-faut un client OAuth **« Application Web »** avec `https://yt.etiodocplateforme.fr/oauth/callback`
+L'URI de redirection OAuth dépend du domaine. En prod, il
+faut un client OAuth **« Application Web »** avec `https://<ton-domaine>/oauth/callback`
 enregistré. Comme ce client a un `client_id` différent de celui utilisé en local, les
 tokens connectés en local ne seront plus valides : **reconnecte chaque chaîne** depuis
 l'interface une fois en production (bouton « Connecter »).

@@ -1,7 +1,7 @@
 # Reverse-proxy HTTPS pour yt-poster, avec certificat TLS automatique (Let's Encrypt).
 #
 # Prérequis :
-#   - Le DNS de yt.etiodocplateforme.fr pointe vers l'IP du serveur (enregistrement A/AAAA).
+#   - Le DNS de yt.mondomaine.fr pointe vers l'IP du serveur (enregistrement A/AAAA).
 #   - Les ports 80 et 443 sont ouverts.
 #   - L'appli yt-poster tourne en local sur le port 8080 (service systemd).
 #
@@ -17,7 +17,7 @@
 #
 # Caddy obtient et renouvelle le certificat tout seul.
 
-yt.etiodocplateforme.fr {
+yt.mondomaine.fr {
 	# Uploads de vidéos volumineux : on relève la limite de taille du corps de requête.
 	request_body {
 		max_size 4GB

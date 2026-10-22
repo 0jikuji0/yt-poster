@@ -1553,7 +1553,8 @@ def help_videos():
     .json pour un titre par vidéo, et copie en masse côté serveur). La liste réelle
     des chaînes est passée pour générer les commandes CLI prêtes à copier."""
     return render_template("help_videos.html",
-                           channel_names=list(config["channels"].keys()))
+                           channel_names=list(config["channels"].keys()),
+                           ssh_host=os.environ.get("SSH_HOST") or "<utilisateur>@<ip-du-serveur>")
 
 
 @app.route("/aide/statistiques")

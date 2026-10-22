@@ -102,6 +102,33 @@ def save_state(state_path: Path, state: dict):
     state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False))
 
 
+def clean_text(value, max_bytes: int) -> str:
+    """Texte accepté par YouTube : pas de « < » ni « > » (refusés : invalidDescription /
+    invalidTitle), limite comptée en octets UTF-8 (un emoji = 4 octets)."""
+    if isinstance(value, list):
+        value = "\n".join(str(v) for v in value)
+    text = str(value or "").replace("<", "‹").replace(">", "›")
+    return text.encode("utf-8")[:max_bytes].decode("utf-8", "ignore").strip()
+
+
+def clean_tags(tags) -> list:
+    """Liste de tags valide : pas de < >, et 500 caractères au total (limite YouTube)."""
+    if isinstance(tags, str):
+        tags = tags.split(",")
+    out, total = [], 0
+    for t in tags or []:
+        t = clean_text(t, 100).lstrip("#")
+        if not t:
+            continue
+        # YouTube compte les guillemets autour des tags contenant un espace.
+        cost = len(t) + (2 if " " in t else 0) + (1 if out else 0)
+        if total + cost > 500:
+            break
+        out.append(t)
+        total += cost
+    return out
+
+
 def read_metadata(json_path: Path, video_path: Path, add_shorts_tag: bool) -> dict:
     """Lit le JSON associé et construit le corps de la requête videos.insert."""
     try:
@@ -109,9 +136,9 @@ def read_metadata(json_path: Path, video_path: Path, add_shorts_tag: bool) -> di
     except json.JSONDecodeError as e:
         raise ValueError(f"JSON invalide ({json_path.name}) : {e}")
 
-    title = meta.get("title") or video_path.stem
-    description = meta.get("description", "")
-    tags = meta.get("tags", [])
+    title = clean_text(meta.get("title"), 400) or video_path.stem
+    description = clean_text(meta.get("description"), 4900)
+    tags = clean_tags(meta.get("tags", []))
     privacy = str(meta.get("privacy", "public")).lower()      # public | unlisted | private
     category_id = str(meta.get("category_id", "22"))          # 22 = People & Blogs
     publish_at = meta.get("publish_at")                       # ISO 8601, ex "2026-09-01T18:00:00Z"
@@ -133,7 +160,7 @@ def read_metadata(json_path: Path, video_path: Path, add_shorts_tag: bool) -> di
     return {
         "snippet": {
             "title": title[:100],            # YouTube : 100 caractères max
-            "description": description[:5000],
+            "description": clean_text(description, 5000),
             "tags": tags,
             "categoryId": category_id,
         },

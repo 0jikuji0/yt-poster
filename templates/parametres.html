@@ -64,6 +64,7 @@
       </div>
     </form>
 
+    {% if is_admin %}
     <section class="card">
       <div class="card-h"><h2>Identifiants OAuth (partagés)</h2>
         <span class="pill {{ 'ok' if has_secrets else 'off' }}">{{ 'installé' if has_secrets else 'manquant' }}</span></div>
@@ -83,6 +84,7 @@
         <a class="btn ghost" style="margin-top:14px;" href="{{ url_for('help_credentials') }}">Comment créer ce fichier ?</a>
       </div>
     </section>
+    {% endif %}
   </div>
 
   <aside class="grid" style="gap:24px;">
@@ -108,6 +110,7 @@
       </div>
     </section>
 
+    {% if is_admin %}
     <section class="card">
       <div class="card-h"><h2>Application</h2></div>
       <div class="card-b">
@@ -122,6 +125,7 @@
         <a class="btn ghost" style="margin-top:14px;width:100%;justify-content:center;" href="{{ url_for('help_index') }}">Documentation</a>
       </div>
     </section>
+    {% endif %}
 
     <section class="card" style="border-color:#4a2a2a;">
       <div class="card-h"><h2>Zone rouge</h2></div>

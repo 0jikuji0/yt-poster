@@ -70,6 +70,16 @@
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2.5 2.5 0 0 1 2 1v14a2.5 2.5 0 0 0-2-1H5.5A1.5 1.5 0 0 1 4 16.5v-11z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2.5 2.5 0 0 0-2 1v14a2.5 2.5 0 0 1 2-1h4.5a1.5 1.5 0 0 0 1.5-1.5v-11z"/></svg>
       Documentation
     </a>
+    {% if is_admin %}
+    <a class="sb-link {{ 'on' if page == 'utilisateurs' }}" href="{{ url_for('utilisateurs') }}">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l7.5 3v5.5c0 4.5-3.2 8.2-7.5 9.5-4.3-1.3-7.5-5-7.5-9.5V6L12 3z"/><circle cx="12" cy="10" r="2.4"/><path d="M8.3 16.2c.7-1.8 2.1-2.7 3.7-2.7s3 .9 3.7 2.7"/></svg>
+      Utilisateurs
+    </a>
+    {% endif %}
+    <a class="sb-link {{ 'on' if page == 'compte' }}" href="{{ url_for('compte') }}">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.5 20c.9-3.6 3.9-5.6 7.5-5.6s6.6 2 7.5 5.6" stroke-linecap="round"/></svg>
+      Mon compte <span style="margin-left:auto;font-size:12px;color:var(--txt-3);">{{ me }}</span>
+    </a>
     <a class="sb-link" href="{{ url_for('logout') }}">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 7V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2"/><path d="M10 12h11m0 0-3.2-3.2M21 12l-3.2 3.2" stroke-linecap="round"/></svg>
       Déconnexion

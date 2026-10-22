@@ -23,8 +23,13 @@
       <p class="tiny muted" style="margin:0 0 20px;">Interface d'auto-publication YouTube Shorts.</p>
       <form method="post">
         <div class="field">
+          <label>Identifiant</label>
+          <input class="inp" type="text" name="username" autocomplete="username"
+                 autocapitalize="none" autofocus required>
+        </div>
+        <div class="field" style="margin-top:14px;">
           <label>Mot de passe</label>
-          <input class="inp" type="password" name="password" autofocus required>
+          <input class="inp" type="password" name="password" autocomplete="current-password" required>
         </div>
         <button class="btn primary" style="margin-top:18px;width:100%;justify-content:center;">Entrer</button>
       </form>

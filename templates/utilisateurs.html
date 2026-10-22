@@ -1,0 +1,90 @@
+{% extends "_studio.html" %}
+
+{% macro channel_boxes(selected) %}
+  <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px;">
+    {% for ch in all_channels %}
+      <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;">
+        <input type="checkbox" name="channels" value="{{ ch }}" {{ 'checked' if ch in selected }}> {{ ch }}
+      </label>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Utilisateurs</h1>
+    <div class="page-sub">Chaque compte ne voit que ses chaînes. Un administrateur voit tout et gère les comptes.</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:24px;">
+  <table class="tbl">
+    <thead><tr><th>Identifiant</th><th>Rôle</th><th>Chaînes</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><b>{{ u.name }}</b>{% if u.name == me %} <span class="tiny muted">(toi)</span>{% endif %}</td>
+        <td>{% if u.role == 'admin' %}<span class="pill info">admin</span>{% else %}<span class="pill ok">utilisateur</span>{% endif %}</td>
+        <td>{{ 'toutes' if u.role == 'admin' else (u.channels|join(', ') or '—') }}</td>
+        <td class="num">
+          <details>
+            <summary class="btn ghost" style="display:inline-flex;">Modifier</summary>
+            <form method="post" action="{{ url_for('edit_user', username=u.name) }}"
+                  style="text-align:left;margin-top:12px;min-width:280px;">
+              <div class="field"><label>Rôle</label>
+                <select class="inp" name="role">
+                  <option value="user" {{ 'selected' if u.role != 'admin' }}>Utilisateur</option>
+                  <option value="admin" {{ 'selected' if u.role == 'admin' }}>Administrateur</option>
+                </select></div>
+              <div class="field" style="margin-top:12px;"><label>Chaînes (utilisateur)</label>
+                {{ channel_boxes(u.channels) }}</div>
+              <div class="field" style="margin-top:12px;"><label>Créer et attribuer une nouvelle chaîne</label>
+                <input class="inp" type="text" name="new_channel" placeholder="facultatif"></div>
+              <div class="field" style="margin-top:12px;"><label>Nouveau mot de passe</label>
+                <input class="inp" type="password" name="password" autocomplete="new-password"
+                       minlength="{{ min_pwd }}" placeholder="vide = inchangé"></div>
+              <button class="btn primary" style="margin-top:14px;">Enregistrer</button>
+            </form>
+            {% if u.name != me %}
+            <form method="post" action="{{ url_for('delete_user', username=u.name) }}" style="margin-top:10px;text-align:left;"
+                  data-confirm="Supprimer le compte « {{ u.name }} » ? Ses chaînes et vidéos restent en place.">
+              <button class="btn danger">Supprimer le compte</button>
+            </form>
+            {% endif %}
+          </details>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<form method="post" action="{{ url_for('add_user') }}" class="card">
+  <div class="card-h"><h2>Nouveau compte</h2></div>
+  <div class="card-b">
+    <div class="row2">
+      <div class="field"><label>Identifiant (a-z, 0-9, « . », « _ », « - »)</label>
+        <input class="inp" type="text" name="username" required pattern="[a-z0-9._\-]{2,32}"
+               autocapitalize="none" autocomplete="off"></div>
+      <div class="field"><label>Mot de passe ({{ min_pwd }} caractères minimum)</label>
+        <input class="inp" type="password" name="password" required minlength="{{ min_pwd }}"
+               autocomplete="new-password"></div>
+    </div>
+    <div class="field" style="margin-top:16px;max-width:320px;"><label>Rôle</label>
+      <select class="inp" name="role">
+        <option value="user">Utilisateur (ses chaînes seulement)</option>
+        <option value="admin">Administrateur (tout)</option>
+      </select></div>
+    <div class="field" style="margin-top:16px;"><label>Chaînes existantes à lui attribuer</label>
+      {{ channel_boxes([]) }}</div>
+    <div class="field" style="margin-top:16px;max-width:320px;"><label>…ou créer une nouvelle chaîne pour lui</label>
+      <input class="inp" type="text" name="new_channel" placeholder="ex. chaine_de_paul"></div>
+    <div class="hint" style="margin-top:12px;">
+      La personne se connecte ensuite avec son identifiant, ouvre Paramètres et clique
+      « Connecter à YouTube » pour relier sa propre chaîne. Elle peut aussi ajouter d'autres chaînes elle-même.
+    </div>
+    <button class="btn primary" style="margin-top:20px;">Créer le compte</button>
+  </div>
+</form>
+{% endblock %}

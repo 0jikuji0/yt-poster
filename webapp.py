@@ -127,11 +127,18 @@ def load_config() -> dict:
     else:
         cfg = {}
 
-    cfg.setdefault("password_hash", None)
     cfg.setdefault("secret_key", token_hex(32))
     cfg.setdefault("base_url", os.environ.get("BASE_URL", "http://localhost:8080"))
     cfg.setdefault("timezone", "Europe/Paris")
     cfg.setdefault("channels", {})
+    # Comptes : {identifiant: {"password_hash", "role": "admin"|"user", "channels": [...]}}.
+    # Un admin voit toutes les chaînes ; un utilisateur seulement celles de sa liste.
+    cfg.setdefault("users", {})
+    # Migration : l'ancien mot de passe unique devient le compte « admin ». La clé
+    # password_hash est conservée telle quelle pour un éventuel retour arrière.
+    if cfg.get("password_hash") and not cfg["users"]:
+        cfg["users"]["admin"] = {"password_hash": cfg["password_hash"],
+                                 "role": "admin", "channels": []}
 
     if not cfg["channels"]:
         for name in DEFAULT_CHANNEL_NAMES:
@@ -610,17 +617,48 @@ def card(name: str) -> dict:
     return cache[name]
 
 
+def current_user():
+    """Compte connecté (entrée de config["users"]) ou None."""
+    name = session.get("user")
+    return config["users"].get(name) if name else None
+
+
+def is_admin() -> bool:
+    u = current_user()
+    return bool(u and u.get("role") == "admin")
+
+
+def visible_channels() -> list:
+    """Chaînes accessibles au compte connecté : toutes pour un admin, sinon les siennes."""
+    u = current_user()
+    if not u:
+        return []
+    if u.get("role") == "admin":
+        return list(config["channels"])
+    return [n for n in u.get("channels", []) if n in config["channels"]]
+
+
+def can_access(name: str) -> bool:
+    return name in config["channels"] and name in visible_channels()
+
+
+def owners_of(name: str) -> list:
+    """Comptes non-admin à qui la chaîne est attribuée."""
+    return [u for u, d in config["users"].items()
+            if d.get("role") != "admin" and name in d.get("channels", [])]
+
+
 def current_channel() -> str:
     """Chaîne « active » de l'interface : ?c=… sinon la dernière choisie, sinon la 1re."""
-    names = list(config["channels"])
+    names = visible_channels()
     if not names:
         return ""
     asked = request.args.get("c") or request.form.get("c")
-    if asked in config["channels"]:
+    if asked in names:
         session["cur_ch"] = asked
         return asked
     remembered = session.get("cur_ch")
-    if remembered in config["channels"]:
+    if remembered in names:
         return remembered
     return names[0]
 
@@ -628,13 +666,15 @@ def current_channel() -> str:
 @app.context_processor
 def inject_nav():
     """Rend la sidebar Studio disponible dans tous les templates."""
-    if not session.get("logged_in") or not config["channels"]:
+    if not current_user() or not visible_channels():
         return {}
     cur_id = current_channel()
     return {
         "cur_id": cur_id,
         "cur": card(cur_id),
-        "nav_channels": [card(n) for n in config["channels"]],
+        "nav_channels": [card(n) for n in visible_channels()],
+        "me": session.get("user"),
+        "is_admin": is_admin(),
         "nav_has_secrets": SECRETS_PATH.exists(),
         "tz": config["timezone"],
         "nav_alerts": sum(1 for ln in list(LOG_BUFFER)[:40] if "ERROR" in ln),
@@ -733,40 +773,82 @@ def override_url_for():
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if config["password_hash"] is None:
+        if not config["users"]:
             return redirect(url_for("setup"))
-        if not session.get("logged_in"):
+        if not current_user():
+            session.clear()
             return redirect(url_for("login", next=request.path))
         return f(*args, **kwargs)
     return wrapper
 
 
+def admin_required(f):
+    @wraps(f)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if not is_admin():
+            abort(403)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+USERNAME_RE = re.compile(r"^[a-z0-9._-]{2,32}$")
+MIN_PASSWORD = 8
+
+
+def hash_password(pwd: str) -> str:
+    return generate_password_hash(pwd, method="pbkdf2:sha256")
+
+
+def check_new_account(username: str, pwd: str) -> "str | None":
+    """Message d'erreur si l'identifiant ou le mot de passe ne conviennent pas."""
+    if not USERNAME_RE.match(username):
+        return "Identifiant invalide : 2 à 32 caractères parmi a-z, 0-9, « . », « _ », « - »."
+    if username in config["users"]:
+        return "Cet identifiant existe déjà."
+    if len(pwd) < MIN_PASSWORD:
+        return f"Le mot de passe doit faire au moins {MIN_PASSWORD} caractères."
+    return None
+
+
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
-    if config["password_hash"] is not None:
+    """Premier lancement : création du compte administrateur."""
+    if config["users"]:
         return redirect(url_for("login"))
     if request.method == "POST":
+        username = request.form.get("username", "").strip().lower()
         pwd = request.form.get("password", "")
-        if len(pwd) < 6:
-            flash("Le mot de passe doit faire au moins 6 caractères.", "error")
+        err = check_new_account(username, pwd)
+        if err:
+            flash(err, "error")
         else:
-            config["password_hash"] = generate_password_hash(pwd, method="pbkdf2:sha256")
+            config["users"][username] = {"password_hash": hash_password(pwd),
+                                         "role": "admin", "channels": []}
             save_config()
-            session["logged_in"] = True
-            flash("Mot de passe créé. Bienvenue !", "ok")
+            session.clear()
+            session["user"] = username
+            flash("Compte administrateur créé. Bienvenue !", "ok")
             return redirect(url_for("home"))
     return render_template("setup.html")
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if config["password_hash"] is None:
+    if not config["users"]:
         return redirect(url_for("setup"))
     if request.method == "POST":
-        if check_password_hash(config["password_hash"], request.form.get("password", "")):
-            session["logged_in"] = True
-            return redirect(request.args.get("next") or url_for("home"))
-        flash("Mot de passe incorrect.", "error")
+        username = request.form.get("username", "").strip().lower()
+        u = config["users"].get(username)
+        if u and check_password_hash(u["password_hash"], request.form.get("password", "")):
+            session.clear()
+            session["user"] = username
+            nxt = request.args.get("next") or ""
+            # Uniquement un chemin interne (pas « //site.tld »).
+            return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//")
+                            else url_for("home"))
+        log.warning("Échec de connexion pour « %s »", username)
+        flash("Identifiant ou mot de passe incorrect.", "error")
     return render_template("login.html")
 
 
@@ -1303,7 +1385,7 @@ def aggregate_analytics(days: "int | None" = 28) -> dict:
     tot = {"subs": 0, "views": 0, "videos": 0}
     has_totals = False
     rows = []
-    for nm in config["channels"]:
+    for nm in visible_channels():
         cc = card(nm)
         aa = analytics_payload(nm, cc, days=days)
         for d in aa["daily"]:
@@ -1340,7 +1422,7 @@ def aggregate_analytics(days: "int | None" = 28) -> dict:
 @app.route("/tableau")
 @login_required
 def dashboard():
-    if not config["channels"]:
+    if not visible_channels():
         return redirect(url_for("chaines"))
     name = current_channel()
     c = card(name)
@@ -1380,7 +1462,7 @@ def contenus():
 @app.route("/analytics")
 @login_required
 def analytics():
-    if not config["channels"]:
+    if not visible_channels():
         return redirect(url_for("chaines"))
     name = current_channel()
     c = card(name)
@@ -1436,7 +1518,7 @@ def planification():
             dur = str(rem) if rem in (1, 2, 3, 7, 14) else "permanent"
         except (ValueError, TypeError):
             dur = "permanent"
-    others = [card(n) for n in config["channels"] if n != name]
+    others = [card(n) for n in visible_channels() if n != name]
     return render_template("planification.html", page="planification",
                            page_name="Planification", c=c, fixed=fixed,
                            fixed_until=until, fixed_duration=dur, others=others,
@@ -1467,6 +1549,9 @@ def journal():
     lines = list(LOG_BUFFER)
     if scope == "channel" and name:
         lines = [ln for ln in lines if name in ln]
+    elif not is_admin():
+        mine = visible_channels()
+        lines = [ln for ln in lines if any(n in ln for n in mine)]
     return render_template("journal.html", page="journal", page_name="Journal",
                            c=card(name), lines=lines[:400], scope=scope)
 
@@ -1484,7 +1569,7 @@ def parametres():
 @login_required
 def chaines():
     """Vue « toutes les chaînes » : cumul et comparatif."""
-    cards = [card(n) for n in config["channels"]]
+    cards = [card(n) for n in visible_channels()]
     rows, tot = [], {"views": 0, "subs": 0, "videos": 0, "pending": 0, "posted": 0}
     for c in cards:
         totals = fetch_channel_totals(c["id"]) if c["connected"] else None
@@ -1553,7 +1638,7 @@ def help_videos():
     .json pour un titre par vidéo, et copie en masse côté serveur). La liste réelle
     des chaînes est passée pour générer les commandes CLI prêtes à copier."""
     return render_template("help_videos.html",
-                           channel_names=list(config["channels"].keys()),
+                           channel_names=visible_channels(),
                            ssh_host=os.environ.get("SSH_HOST") or "<utilisateur>@<ip-du-serveur>")
 
 
@@ -1570,7 +1655,7 @@ def help_stats():
 @login_required
 def channel(name):
     """Ancienne URL de la SPA : sélectionne la chaîne et ouvre son tableau de bord."""
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     return redirect(url_for("dashboard", c=name))
 
@@ -1581,7 +1666,7 @@ def channel_settings(name):
     """Enregistre les réglages d'une chaîne. Le champ caché « section » dit quelle
     partie du formulaire est envoyée (planification ou métadonnées), pour ne jamais
     écraser les réglages absents du formulaire."""
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     ch = config["channels"][name]
     section = request.form.get("section", "all")
@@ -1652,7 +1737,7 @@ def _read_json_text(fstorage):
 @app.route("/channel/<name>/upload", methods=["POST"])
 @login_required
 def upload(name):
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     folder = channel_folder(name)
     files = [f for f in request.files.getlist("videos") if f and f.filename]
@@ -1749,7 +1834,7 @@ def upload(name):
 @app.route("/channel/<name>/delete", methods=["POST"])
 @login_required
 def delete_pending(name):
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     folder = channel_folder(name)
     target = secure_filename(request.form.get("video", ""))
@@ -1767,7 +1852,7 @@ def delete_pending(name):
 @login_required
 def delete_many(name):
     """Supprime plusieurs vidéos en attente (sélection dans la page Contenus)."""
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     folder = channel_folder(name)
     n = 0
@@ -1787,7 +1872,7 @@ def delete_many(name):
 @app.route("/channel/<name>/post-now", methods=["POST"])
 @login_required
 def post_now(name):
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     # Lance l'upload en tâche de fond pour ne pas bloquer la page.
     scheduler.add_job(post_one, args=[name], misfire_grace_time=60)
@@ -1798,10 +1883,15 @@ def post_now(name):
 @app.route("/schedule/regenerate", methods=["POST"])
 @login_required
 def regenerate_schedule():
-    """Re-tire au hasard les horaires de publication du jour (toutes chaînes)."""
-    plan_day()
+    """Re-tire au hasard les horaires de publication du jour (toutes chaînes visibles)."""
+    mine = visible_channels()
+    if is_admin():
+        plan_day()
+    else:
+        for nm in mine:
+            plan_channel(nm)
     now = datetime.now(TZ)
-    remaining = sum(len([t for t in ts if t > now]) for ts in SCHEDULE_TODAY.values())
+    remaining = sum(len([t for t in SCHEDULE_TODAY.get(nm, []) if t > now]) for nm in mine)
     flash(f"Horaires régénérés — {remaining} créneau(x) restant(s) aujourd'hui.", "ok")
     return redirect(request.referrer or url_for("dashboard"))
 
@@ -1810,7 +1900,7 @@ def regenerate_schedule():
 @login_required
 def set_cadence(name):
     """Modifie rapidement le nombre de vidéos/jour d'une chaîne (depuis le dashboard)."""
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     try:
         n = max(0, min(50, int(request.form.get("posts_per_day", ""))))
@@ -1828,7 +1918,7 @@ def set_cadence(name):
 @login_required
 def regenerate_channel_schedule(name):
     """Re-tire au hasard les horaires du jour pour cette chaîne uniquement."""
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     plan_channel(name)
     now = datetime.now(TZ)
@@ -1842,7 +1932,7 @@ def regenerate_channel_schedule(name):
 @login_required
 def media(name, filename):
     """Sert un fichier vidéo de la chaîne (pour l'aperçu/lecture dans la galerie)."""
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     safe = secure_filename(filename)
     return send_from_directory(channel_folder(name), safe, conditional=True)
@@ -1860,6 +1950,8 @@ def add_channel():
         flash("Cette chaîne existe déjà.", "error")
     else:
         config["channels"][name] = default_channel()
+        if not is_admin():
+            current_user().setdefault("channels", []).append(name)
         save_config()
         plan_day()
         flash(f"Chaîne « {name} » ajoutée.", "ok")
@@ -1870,7 +1962,7 @@ def add_channel():
 @app.route("/channel/<name>/rename", methods=["POST"])
 @login_required
 def rename_channel(name):
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     new = secure_filename(request.form.get("new_name", "").strip())
     here = url_for("parametres", c=name)
@@ -1890,6 +1982,8 @@ def rename_channel(name):
     if old_tok.exists():
         old_tok.rename(TOKENS_DIR / f"token_{new}.json")
     config["channels"][new] = config["channels"].pop(name)
+    for u in config["users"].values():
+        u["channels"] = [new if n == name else n for n in u.get("channels", [])]
     save_config()
     plan_day()
     session["cur_ch"] = new
@@ -1902,12 +1996,19 @@ def rename_channel(name):
 def remove_channel(name):
     """Retire la chaîne de l'interface : config + jeton OAuth. Les vidéos déjà
     déposées restent sur le disque (channels/<nom>/), rien n'est effacé."""
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     if len(config["channels"]) <= 1:
         flash("Impossible de retirer la dernière chaîne — ajoutes-en une autre d'abord.", "error")
         return redirect(url_for("parametres", c=name))
+    alone = [u for u in owners_of(name) if config["users"][u].get("channels") == [name]]
+    if alone:
+        flash(f"Impossible : c'est la seule chaîne de « {alone[0]} ». "
+              "Ajoute-lui une autre chaîne d'abord.", "error")
+        return redirect(url_for("parametres", c=name))
     config["channels"].pop(name)
+    for u in config["users"].values():
+        u["channels"] = [n for n in u.get("channels", []) if n != name]
     tok = token_path(name)
     if tok.exists():
         tok.unlink()
@@ -1920,9 +2021,119 @@ def remove_channel(name):
     return redirect(url_for("chaines"))
 
 
+# --- Comptes ---
+@app.route("/compte", methods=["GET", "POST"])
+@login_required
+def compte():
+    """Mon compte : changement de son propre mot de passe."""
+    if request.method == "POST":
+        u = current_user()
+        new = request.form.get("new_password", "")
+        if not check_password_hash(u["password_hash"], request.form.get("password", "")):
+            flash("Mot de passe actuel incorrect.", "error")
+        elif len(new) < MIN_PASSWORD:
+            flash(f"Le nouveau mot de passe doit faire au moins {MIN_PASSWORD} caractères.", "error")
+        else:
+            u["password_hash"] = hash_password(new)
+            save_config()
+            flash("Mot de passe modifié ✓", "ok")
+        return redirect(url_for("compte"))
+    return render_template("compte.html", page="compte", page_name="Mon compte",
+                           c=card(current_channel()), role=current_user().get("role"))
+
+
+def _form_channels() -> list:
+    """Chaînes cochées dans un formulaire utilisateur (+ éventuelle nouvelle chaîne)."""
+    chosen = [n for n in request.form.getlist("channels") if n in config["channels"]]
+    new = secure_filename(request.form.get("new_channel", "").strip())
+    if new:
+        if new not in config["channels"]:
+            config["channels"][new] = default_channel()
+        if new not in chosen:
+            chosen.append(new)
+    return chosen
+
+
+@app.route("/utilisateurs")
+@admin_required
+def utilisateurs():
+    users = [{"name": u, "role": d.get("role", "user"),
+              "channels": [n for n in d.get("channels", []) if n in config["channels"]]}
+             for u, d in sorted(config["users"].items())]
+    return render_template("utilisateurs.html", page="utilisateurs", page_name="Utilisateurs",
+                           c=card(current_channel()), users=users,
+                           all_channels=list(config["channels"]), min_pwd=MIN_PASSWORD)
+
+
+@app.route("/utilisateurs/ajouter", methods=["POST"])
+@admin_required
+def add_user():
+    username = request.form.get("username", "").strip().lower()
+    pwd = request.form.get("password", "")
+    role = "admin" if request.form.get("role") == "admin" else "user"
+    err = check_new_account(username, pwd)
+    if err:
+        flash(err, "error")
+        return redirect(url_for("utilisateurs"))
+    chans = _form_channels()
+    if role == "user" and not chans:
+        flash("Attribue au moins une chaîne (ou crée-en une) à ce compte.", "error")
+        return redirect(url_for("utilisateurs"))
+    config["users"][username] = {"password_hash": hash_password(pwd), "role": role,
+                                 "channels": chans if role == "user" else []}
+    save_config()
+    plan_day()
+    log.info("Compte « %s » créé (%s)", username, role)
+    flash(f"Compte « {username} » créé ✓", "ok")
+    return redirect(url_for("utilisateurs"))
+
+
+@app.route("/utilisateurs/<username>/modifier", methods=["POST"])
+@admin_required
+def edit_user(username):
+    u = config["users"].get(username)
+    if not u:
+        abort(404)
+    role = "admin" if request.form.get("role") == "admin" else "user"
+    if role == "user" and u.get("role") == "admin" and username == session.get("user"):
+        flash("Tu ne peux pas retirer tes propres droits d'administrateur.", "error")
+        return redirect(url_for("utilisateurs"))
+    pwd = request.form.get("password", "")
+    if pwd and len(pwd) < MIN_PASSWORD:
+        flash(f"Le mot de passe doit faire au moins {MIN_PASSWORD} caractères.", "error")
+        return redirect(url_for("utilisateurs"))
+    chans = _form_channels()
+    if role == "user" and not chans:
+        flash("Un utilisateur doit avoir au moins une chaîne.", "error")
+        return redirect(url_for("utilisateurs"))
+    if pwd:
+        u["password_hash"] = hash_password(pwd)
+    u["role"] = role
+    u["channels"] = chans if role == "user" else []
+    save_config()
+    plan_day()
+    flash(f"Compte « {username} » mis à jour ✓", "ok")
+    return redirect(url_for("utilisateurs"))
+
+
+@app.route("/utilisateurs/<username>/supprimer", methods=["POST"])
+@admin_required
+def delete_user(username):
+    if username not in config["users"]:
+        abort(404)
+    if username == session.get("user"):
+        flash("Tu ne peux pas supprimer ton propre compte.", "error")
+        return redirect(url_for("utilisateurs"))
+    config["users"].pop(username)
+    save_config()
+    log.info("Compte « %s » supprimé", username)
+    flash(f"Compte « {username} » supprimé. Ses chaînes restent en place.", "ok")
+    return redirect(url_for("utilisateurs"))
+
+
 # --- Identifiants OAuth (client_secret.json), partagés entre les chaînes ---
 @app.route("/credentials/upload", methods=["POST"])
-@login_required
+@admin_required
 def upload_credentials():
     back_url = request.referrer or url_for("dashboard")
     f = request.files.get("secrets")
@@ -1950,7 +2161,7 @@ def upload_credentials():
 @app.route("/channel/<name>/views/add", methods=["POST"])
 @login_required
 def add_views(name):
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     back_url = request.form.get("next") or url_for("analytics", c=name)
     date = request.form.get("date", "").strip()
@@ -1983,7 +2194,7 @@ def add_views(name):
 @login_required
 def sync_views(name):
     """Force la récupération des stats YouTube et enregistre le relevé du jour."""
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     back_url = request.form.get("next") or url_for("analytics", c=name)
     if not token_path(name).exists():
@@ -2018,7 +2229,7 @@ def sync_views(name):
 @app.route("/channel/<name>/views/delete", methods=["POST"])
 @login_required
 def delete_views(name):
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     date = request.form.get("date", "")
     config["channels"][name]["views"] = [
@@ -2032,7 +2243,7 @@ def delete_views(name):
 @app.route("/channel/<name>/connect")
 @login_required
 def connect(name):
-    if name not in config["channels"]:
+    if not can_access(name):
         abort(404)
     if not SECRETS_PATH.exists():
         flash("client_secret.json manquant sur le serveur.", "error")

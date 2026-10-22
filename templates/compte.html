@@ -1,0 +1,41 @@
+{% extends "_studio.html" %}
+
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Mon compte</h1>
+    <div class="page-sub">Connecté en tant que « {{ me }} » —
+      {{ 'administrateur (toutes les chaînes)' if role == 'admin' else nav_channels|length ~ ' chaîne(s) attribuée(s)' }}.</div>
+  </div>
+</div>
+
+<div class="dash">
+  <form method="post" class="card">
+    <div class="card-h"><h2>Changer de mot de passe</h2></div>
+    <div class="card-b">
+      <div class="field" style="max-width:360px;"><label>Mot de passe actuel</label>
+        <input class="inp" type="password" name="password" autocomplete="current-password" required></div>
+      <div class="field" style="max-width:360px;margin-top:14px;"><label>Nouveau mot de passe (8 caractères minimum)</label>
+        <input class="inp" type="password" name="new_password" autocomplete="new-password" required minlength="8"></div>
+      <button class="btn primary" style="margin-top:22px;">Enregistrer</button>
+    </div>
+  </form>
+
+  <aside class="grid" style="gap:24px;">
+    <section class="card">
+      <div class="card-h"><h2>Mes chaînes</h2></div>
+      <div class="card-b">
+        <div class="metrics" style="margin-top:0;">
+          {% for ch in nav_channels %}
+            <div class="metric"><a class="link" href="{{ url_for('dashboard', c=ch.id) }}">{{ ch.id }}</a>
+              <b>{{ 'connectée' if ch.connected else 'non connectée' }}</b></div>
+          {% endfor %}
+        </div>
+        <div class="hint" style="margin-top:12px;">
+          Pour ajouter une chaîne : « Toutes les chaînes » → Ajouter, puis « Connecter » dans Paramètres.
+        </div>
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

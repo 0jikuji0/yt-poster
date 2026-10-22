@@ -26,12 +26,17 @@ ses métadonnées (titre, description, tags). Le script retient ce qui a déjà 
   - `templates/_studio.html` (coquille : topbar, modale « Créer ») + `templates/_nav.html` (barre latérale) ;
   - pages : `dashboard`, `contenus`, `analytics` (onglets Aperçu/Contenu/Audience/Tendances,
     calquée sur la page « Données analytiques » de YouTube Studio), `planification`, `heures`, `journal`,
-    `parametres`, `chaines`, `help_*` ; `login`/`setup` sont autonomes ;
+    `parametres`, `chaines`, `compte`, `utilisateurs`, `help_*` ; `login`/`setup` sont autonomes ;
   - `static/studio.css` (design system : variables de couleurs, cartes, tableaux, formulaires)
     et `static/studio.js` (menu, sélecteur de chaîne, modale, courbes SVG `[data-chart]`).
   - Contexte injecté dans tous les templates par `inject_nav()` : `cur` (chaîne active,
     via `channel_card()`), `cur_id`, `nav_channels`, `tz`. Filtres Jinja : `n`, `signed`, `frdate`.
-- `config.json` (non versionné) : mot de passe haché, `base_url`, `timezone`, réglages par chaîne.
+- **Comptes** : `config["users"]` = `{identifiant: {password_hash, role: "admin"|"user", channels: [...]}}`.
+  Session = `session["user"]`. `visible_channels()` / `can_access(name)` filtrent tout ce qui
+  touche une chaîne (toute route `/channel/<name>` commence par `if not can_access(name): abort(404)`).
+  `@admin_required` pour les pages réservées (`utilisateurs`, upload du `client_secret.json`).
+  Ancien `password_hash` unique migré en compte `admin` au chargement.
+- `config.json` (non versionné) : comptes, `base_url`, `timezone`, réglages par chaîne.
 - `channels/<nom>/` : vidéos + JSON + `.uploaded.json`. `tokens/token_<nom>.json` : OAuth par chaîne.
 - `yt-poster-web.service` : unité systemd pour faire tourner l'appli en permanence.
 - L'OAuth web exige un client Google de type **« Application Web »** avec l'URI de

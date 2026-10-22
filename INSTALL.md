@@ -177,8 +177,9 @@ l'envoi de gros fichiers vidéo depuis le navigateur.
 
 ## 5. Premier accès : mot de passe et chaînes
 
-1. Ouvre `https://yt.mondomaine.fr`. L'appli demande de **créer un mot de passe**.
-   C'est le seul accès au site, qui est public sur Internet : prends-en un solide.
+1. Ouvre `https://yt.mondomaine.fr`. L'appli demande de **créer le compte
+   administrateur** : un identifiant et un mot de passe (8 caractères minimum). Le site
+   est public sur Internet, prends un mot de passe solide.
 2. Va dans **Paramètres** et dépose ton `client_secret.json`.
 3. Va dans **Toutes les chaînes**, ajoute une chaîne (le nom est libre, il sert juste
    dans l'interface), puis clique **Connecter**.
@@ -190,6 +191,32 @@ l'envoi de gros fichiers vidéo depuis le navigateur.
 
 La chaîne active se choisit sous l'avatar, en haut de la barre latérale. Toutes les
 pages travaillent sur cette chaîne.
+
+### Plusieurs comptes (partager ton installation)
+
+Tu peux donner un accès à quelqu'un d'autre sans lui donner ton mot de passe :
+
+1. **Utilisateurs** (barre latérale, visible seulement par un administrateur) →
+   **Nouveau compte** : un identifiant, un mot de passe, et la ou les chaînes qu'il
+   pourra gérer. Tu peux cocher des chaînes existantes ou en créer une nouvelle pour lui.
+2. Donne-lui l'adresse du site, son identifiant et son mot de passe.
+3. Il se connecte, va dans **Paramètres → Connecter à YouTube** et relie **sa** chaîne.
+
+Ce que voit chaque rôle :
+
+| | Administrateur | Utilisateur |
+|---|---|---|
+| Chaînes | toutes | seulement les siennes |
+| Ajouter une chaîne | oui | oui (elle lui est attribuée) |
+| Gérer les comptes | oui | non |
+| Déposer `client_secret.json` | oui | non |
+| Journal | tout | lignes de ses chaînes |
+| Changer son mot de passe (**Mon compte**) | oui | oui |
+
+> Tous les comptes partagent **le même projet Google** et donc le même quota API
+> (~100 vidéos/jour au total). Un administrateur du serveur peut techniquement accéder
+> aux autorisations YouTube de tout le monde : ne donne un compte qu'à des gens de
+> confiance, et inversement.
 
 ---
 
@@ -303,6 +330,7 @@ Vérifier ta chaîne (https://www.youtube.com/verify) lève une partie des limit
 | J'ai changé `BASE_URL` mais rien ne change | L'ancienne valeur est enregistrée dans la config. Supprime la ligne `"base_url"` de `/data/config.json` dans le conteneur, puis redémarre (voir ci-dessous). |
 | Chaînes déconnectées au bout de 7 jours | L'écran de consentement est resté en « Test ». Publie-le (étape 2.2), puis reconnecte les chaînes. |
 | Vidéos en privé alors qu'elles sont réglées en public | Projet API non audité (étape 2.4). |
+| Mot de passe administrateur perdu | Supprime l'entrée `"users"` de `/data/config.json` (voir ci-dessous) et redémarre : l'appli redemande la création d'un compte administrateur. Les chaînes ne sont pas touchées. |
 | `access_denied` à la connexion | Tu as refusé une autorisation, ou l'app est en « Test » et ton compte n'est pas dans les utilisateurs test. |
 | Le site ne s'ouvre pas | Vérifie que le conteneur tourne (`docker compose ps`), que le DNS pointe bien vers le serveur et que les ports 80/443 sont ouverts. |
 | L'envoi d'une grosse vidéo échoue dans le navigateur | Limite de taille du reverse-proxy : voir `max_size` à l'étape 4. |
@@ -324,8 +352,10 @@ rm config.json
 
 - `client_secret.json`, `config.json` et les tokens des chaînes restent **uniquement
   sur ton serveur**, dans le volume `yt_data`. Ils ne sont jamais dans le dépôt Git.
-- Le mot de passe du site est la seule protection de l'interface, qui est publique sur
-  Internet : choisis-en un long.
+- Les mots de passe des comptes sont la seule protection de l'interface, qui est
+  publique sur Internet : choisis-les longs.
+- Un utilisateur ne peut ni voir ni modifier les chaînes des autres, même en tapant
+  leur adresse à la main.
 - Pour retirer l'accès à une chaîne : https://myaccount.google.com/permissions →
   ton application → **Supprimer l'accès**.
 

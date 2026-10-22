@@ -38,7 +38,18 @@ PORT=9000 python webapp.py       # autre port
 BASE_URL=https://ton-domaine.tld python webapp.py
 ```
 
-Au **premier accès**, l'interface demande de **créer un mot de passe**.
+Au **premier accès**, l'interface demande de **créer le compte administrateur**
+(identifiant + mot de passe).
+
+### Comptes
+
+Plusieurs comptes peuvent se connecter (page **Utilisateurs**, réservée aux admins) :
+- **administrateur** : voit toutes les chaînes, gère les comptes et le `client_secret.json` ;
+- **utilisateur** : ne voit que les chaînes qui lui sont attribuées (et celles qu'il ajoute).
+
+Chaque compte change son mot de passe dans **Mon compte**. Mise à jour d'une ancienne
+installation (mot de passe unique) : il devient automatiquement le compte **`admin`**,
+avec le même mot de passe.
 
 ## 4. Connecter les chaînes
 
@@ -61,6 +72,8 @@ l'URL `?c=<nom>` fonctionne partout).
 | **Meilleures heures** (`/heures`) | quelles heures de publication rapportent des vues |
 | **Journal** (`/journal`) | activité du planificateur (uploads, erreurs 403…) |
 | **Toutes les chaînes** (`/chaines`) | tableau comparatif + ajout de chaîne |
+| **Utilisateurs** (`/utilisateurs`) | admin : création/modification/suppression des comptes et chaînes attribuées |
+| **Mon compte** (`/compte`) | changement de mot de passe, liste de ses chaînes |
 | **Paramètres** (`/parametres`) | visibilité par défaut, hashtags automatiques, `client_secret.json`, renommage |
 | **Documentation** (`/aide`) | fiches pas-à-pas |
 
@@ -106,7 +119,7 @@ l'interface une fois en production (bouton « Connecter »).
 
 | Chemin | Rôle |
 |---|---|
-| `config.json` | réglages (mot de passe haché, base_url, chaînes) |
+| `config.json` | réglages (comptes et mots de passe hachés, base_url, chaînes) |
 | `client_secret.json` | identifiants OAuth de l'appli (à fournir) |
 | `tokens/token_<nom>.json` | autorisation par chaîne |
 | `channels/<nom>/` | vidéos + JSON + `.uploaded.json` (anti-doublon) |
